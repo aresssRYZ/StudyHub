@@ -1,6 +1,6 @@
 {
   "name": "studyhub-ai",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -8,9 +8,10 @@
   },
   "scripts": {
     "dev": "node --import tsx --watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/src/index.js",
     "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/conversation.test.ts",
     "register": "node --import tsx scripts/deploy-commands.ts"
   },
   "dependencies": {

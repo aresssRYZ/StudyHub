@@ -4,6 +4,12 @@ import { openDatabase, type StudyHubDatabase } from '../database/database.js';
 import { migrate } from '../database/migrate.js';
 import { onReady } from '../events/ready.js';
 import { onInteractionCreate } from '../events/interaction-create.js';
+import { onMessageCreate } from '../events/message-create.js';
+import { ConversationRepository } from '../conversation/repository.js';
+import { ConversationService } from '../conversation/conversation-service.js';
+import { AiService } from '../ai/ai-service.js';
+import { GroqProvider } from '../ai/providers/groq.js';
+import { GeminiProvider } from '../ai/providers/gemini.js';
 import { DiscordError, errorDetails } from '../shared/errors.js';
 import { configureLogger, logger } from '../shared/logger.js';
 
@@ -58,10 +64,20 @@ export async function startBot(): Promise<void> {
     logger.info('Database connected');
     migrate(activeDatabase);
 
-    client = new Client({ intents: [GatewayIntentBits.Guilds] });
+    const conversations = new ConversationService(
+      new ConversationRepository(activeDatabase, env.AI_MAX_CONTEXT_MESSAGES),
+      new AiService(
+        new GroqProvider(env.GROQ_API_KEY, env.GROQ_MODEL),
+        new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_MODEL)
+      ),
+      env
+    );
+
+    client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
     const activeClient = client;
     client.once(Events.ClientReady, (readyClient) => onReady(readyClient));
     client.on(Events.InteractionCreate, (interaction) => onInteractionCreate(interaction, activeDatabase, env));
+    client.on(Events.MessageCreate, (message) => onMessageCreate(message, conversations));
     client.on(Events.Error, (error) => logger.error(errorDetails(error), 'Discord client error'));
     client.on(Events.Warn, (message) => logger.warn({ message }, 'Discord client warning'));
 

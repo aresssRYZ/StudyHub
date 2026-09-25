@@ -1,9 +1,10 @@
 import type { StudyHubDatabase } from './database.js';
 import { initialMigration } from './migrations/001_initial.js';
+import { conversationsMigration } from './migrations/002_conversations.js';
 import { DatabaseError } from '../shared/errors.js';
 import { logger } from '../shared/logger.js';
 
-const migrations = [initialMigration];
+const migrations = [initialMigration, conversationsMigration];
 
 export function migrate(database: StudyHubDatabase): void {
   try {
