@@ -1,6 +1,6 @@
 # StudyHub AI
 
-StudyHub AI adalah bot Discord privat untuk kelas dan komunitas kecil. Versi **0.2.0** mempertahankan Foundation (`/bot status`, SQLite, migration, logging, dan shutdown) serta menambahkan AI text conversation di satu channel belajar. Panggil bot dengan mention, lanjutkan percakapan tanpa mention selama sesi aktif, atau reply pesan bot. Voice, Focus, Music, dan RVC belum tersedia.
+StudyHub AI adalah bot Discord privat untuk kelas dan komunitas kecil. Versi **0.2.0** mempertahankan Foundation (`/bot status`, SQLite, migration, logging, dan shutdown) serta menambahkan AI text conversation di satu channel belajar. Panggil bot dengan mention, lalu gunakan fitur Reply pada jawaban bot untuk pertanyaan lanjutan. Voice, Focus, Music, dan RVC belum tersedia.
 
 ## Kebutuhan
 
@@ -13,7 +13,7 @@ Project memakai TypeScript strict dengan ESM/`NodeNext`. Ini cocok dengan sistem
 ## Setup Discord Developer Portal
 
 1. Buka [Discord Developer Portal](https://discord.com/developers/applications), buat **New Application**, lalu beri nama StudyHub AI.
-2. Buka halaman **Bot**. Bot user tersedia untuk aplikasi; jika portal meminta membuatnya, pilih **Add Bot**. Aktifkan **Message Content Intent** pada bagian **Privileged Gateway Intents** agar bot dapat membaca pesan lanjutan tanpa mention. **Server Members** dan **Presence Intent** tidak diperlukan.
+2. Buka halaman **Bot**. Bot user tersedia untuk aplikasi; jika portal meminta membuatnya, pilih **Add Bot**. Aktifkan **Message Content Intent** pada bagian **Privileged Gateway Intents** agar bot dapat membaca isi pesan. **Server Members** dan **Presence Intent** tidak diperlukan.
 3. Pada **General Information**, salin **Application ID** ke `DISCORD_CLIENT_ID`.
 4. Pada **Bot**, gunakan **Reset Token** bila token belum dapat disalin, lalu salin token baru ke `DISCORD_TOKEN` di `.env`. Simpan token hanya di komputer pribadi; jangan kirim melalui chat atau commit ke Git.
 5. Pada **Installation**, aktifkan **Guild Install**. Pilih scope `bot` dan `applications.commands`. Berikan akses **View Channel**, **Send Messages**, dan **Read Message History** pada channel belajar. Jangan pilih Administrator.
@@ -74,7 +74,7 @@ data/                        database runtime (diabaikan Git)
 
 ## Cara kerja AI text
 
-AI hanya memproses pesan di `STUDY_CHANNEL_ID`. Mention membuka sesi untuk kombinasi server, channel, dan user; pesan biasa dari user itu menjadi kelanjutan hingga ditutup dengan mention seperti `@StudyHub sudah selesai` atau tidak aktif selama 20 menit. Reply ke pesan bot dapat membuka sesi baru setelah sesi sebelumnya habis, tanpa membawa konteks lama. User lain tetap memiliki sesi sendiri. Pesan di channel lain diabaikan tanpa request API.
+AI hanya memproses pesan di `STUDY_CHANNEL_ID`. Mention memulai topik baru untuk pengguna itu. Pertanyaan lanjutan harus memakai fitur Reply pada jawaban bot dari sesi yang sama; pesan biasa tanpa mention atau Reply diabaikan. Bot hanya menerima Reply dari penanya asal, sehingga pengguna lain tidak dapat mengambil konteksnya. Mention seperti `@StudyHub sudah selesai` menutup sesi. Setelah 20 menit tidak aktif, Reply pada jawaban lama membuka sesi baru tanpa membawa konteks sebelumnya. Jawaban bot ditautkan ke sesi dalam SQLite, termasuk jika jawaban dipecah menjadi beberapa pesan. Pesan di channel lain diabaikan tanpa request API.
 
 Groq adalah provider utama. Gemini digunakan jika Groq mengalami rate limit, timeout, gangguan jaringan, atau error server. Error kredensial atau request yang tidak valid tidak dialihkan ke Gemini. Bot mengirim maksimal 20 pesan terbaru sebagai konteks dan menyimpan hanya 20 pesan terbaru per sesi di SQLite. Jawaban panjang dipecah agar sesuai batas Discord. Log mencatat metadata request, bukan isi chat atau API key.
 
@@ -85,10 +85,11 @@ Roadmap voice nanti memakai `/ai` untuk kontrol mode Assistant, Casual, dan Curh
 ## Checklist uji AI text
 
 - [ ] Mention bot di channel belajar mendapat balasan; mention di channel lain diabaikan.
-- [ ] Pesan lanjutan tanpa mention dibalas saat sesi aktif; pesan user lain yang belum membuka sesi diabaikan.
-- [ ] Reply ke pesan bot melanjutkan sesi. Pertanyaan lanjutan seperti `dia lahir di mana?` memakai konteks sebelumnya.
-- [ ] Mention `@StudyHub sudah selesai` atau `@StudyHub makasih, cukup` menutup sesi tanpa request AI. Pesan biasa berikutnya diabaikan; mention baru membuka sesi baru.
-- [ ] Setelah timeout, pesan biasa diabaikan. Reply ke bot atau mention baru membuka sesi baru tanpa konteks lama.
+- [ ] Pesan biasa tanpa mention atau Reply diabaikan, termasuk dari pengguna yang punya sesi aktif.
+- [ ] Reply penanya asal pada jawaban bot melanjutkan sesi dan memakai konteks sebelumnya; Reply pengguna lain diabaikan.
+- [ ] Mention baru memulai topik baru tanpa konteks lama; Reply ke jawaban topik yang sudah ditutup diabaikan.
+- [ ] Mention `@StudyHub sudah selesai` atau `@StudyHub makasih, cukup` menutup sesi tanpa request AI.
+- [ ] Setelah timeout, pesan biasa diabaikan. Reply ke jawaban lama membuka sesi baru tanpa konteks lama.
 - [ ] Saat Groq terkena rate limit/timeout/5xx, Gemini menjawab; jika keduanya gagal, user mendapat pesan ramah dan bot tetap berjalan.
 - [ ] Pesan cepat dari user yang sama mendapat balasan berurutan; satu pesan Discord tidak dibalas dua kali.
 - [ ] Jawaban panjang dikirim dalam beberapa pesan tanpa error limit Discord.

@@ -53,40 +53,52 @@ export class ConversationService {
     const mention = new RegExp(`<@!?${botId}>`, 'g');
     const explicitlyMentioned = mention.test(message.content);
     const content = message.content.replace(mention, '').trim();
-    const now = Date.now();
-    let session = this.repository.getActive(identity);
+    const linkedSession = !explicitlyMentioned && message.reference?.messageId
+      ? this.repository.getByReply(message.reference.messageId, identity)
+      : undefined;
+    if (!explicitlyMentioned && !linkedSession) return;
 
-    if (session && now - session.lastActivityAt >= this.env.AI_SESSION_TIMEOUT_MINUTES * 60_000) {
-      this.repository.close(session.id, now);
-      logger.info({ conversationId: session.id }, 'Conversation expired');
-      session = undefined;
+    const now = Date.now();
+    let activeSession = this.repository.getActive(identity);
+    const expiredSessionId = activeSession && now - activeSession.lastActivityAt >= this.env.AI_SESSION_TIMEOUT_MINUTES * 60_000
+      ? activeSession.id : undefined;
+    if (expiredSessionId) {
+      this.repository.close(expiredSessionId, now);
+      logger.info({ conversationId: expiredSessionId }, 'Conversation expired');
+      activeSession = undefined;
     }
 
     if (explicitlyMentioned && isCloseIntent(content)) {
-      if (session) {
-        this.repository.close(session.id, now);
-        logger.info({ conversationId: session.id }, 'Conversation closed');
+      if (activeSession) {
+        this.repository.close(activeSession.id, now);
+        logger.info({ conversationId: activeSession.id }, 'Conversation closed');
         await this.reply(message, 'Sip, selesai dulu ya 😄 Kalau butuh bantuan lagi tinggal panggil aku.');
       }
       return;
     }
 
-    const repliedToBot = !session && !explicitlyMentioned && await this.isReplyToBot(message, botId);
-    if (!session && !explicitlyMentioned && !repliedToBot) return;
-    if (!session) {
+    let session;
+    if (explicitlyMentioned) {
+      if (activeSession) this.repository.close(activeSession.id, now);
       session = this.repository.start(identity, now);
-      logger.info({ conversationId: session.id, trigger: repliedToBot ? 'reply' : 'mention' }, 'Conversation started');
-    } else {
+      logger.info({ conversationId: session.id, trigger: 'mention' }, 'Conversation started');
+    } else if (linkedSession?.status === 'ACTIVE' && activeSession?.id === linkedSession.id) {
+      session = activeSession;
       this.repository.touch(session.id, now);
       logger.debug({ conversationId: session.id }, 'Conversation resumed');
+    } else if (linkedSession?.id === expiredSessionId) {
+      session = this.repository.start(identity, now);
+      logger.info({ conversationId: session.id, trigger: 'reply_after_timeout' }, 'Conversation started');
+    } else {
+      return;
     }
 
     if (!content) {
-      await this.reply(message, 'Mau bahas apa? Kirim pertanyaan atau soalmu aja 😄');
+      await this.replyAndLink(message, 'Mau bahas apa? Kirim pertanyaan atau soalmu aja 😄', session.id);
       return;
     }
     if (content.length > 4000) {
-      await this.reply(message, 'Pesannya kepanjangan. Coba bagi jadi beberapa bagian, ya.');
+      await this.replyAndLink(message, 'Pesannya kepanjangan. Coba bagi jadi beberapa bagian, ya.', session.id);
       return;
     }
 
@@ -102,30 +114,25 @@ export class ConversationService {
         history: this.repository.recentMessages(session.id),
         userMessage: content
       }, session.id);
-      for (const part of splitMessage(response)) await this.reply(message, part);
+      for (const part of splitMessage(response)) await this.replyAndLink(message, part, session.id);
       this.repository.saveExchange(session.id, content, response, Date.now());
       logger.info({ conversationId: session.id }, 'AI response sent');
     } catch (error) {
       logger.error({ conversationId: session.id, type: error instanceof Error ? error.name : 'Unknown' }, 'AI request failed');
       try {
-        await this.reply(message, 'Maaf, aku lagi susah menghubungi AI. Coba lagi sebentar ya 😅');
+        await this.replyAndLink(message, 'Maaf, aku lagi susah menghubungi AI. Coba lagi sebentar ya 😅', session.id);
       } catch {
         logger.warn({ conversationId: session.id }, 'Could not send AI error response');
       }
     }
   }
 
-  private async isReplyToBot(message: Message, botId: string): Promise<boolean> {
-    if (!message.reference?.messageId) return false;
-    try {
-      const referenced = await message.fetchReference();
-      return referenced.author.id === botId;
-    } catch {
-      return false;
-    }
+  private async replyAndLink(message: Message, content: string, conversationId: number): Promise<void> {
+    const sent = await this.reply(message, content);
+    this.repository.linkReply(sent.id, conversationId);
   }
 
-  private async reply(message: Message, content: string): Promise<void> {
-    await message.reply({ content, allowedMentions: { parse: [], repliedUser: false } });
+  private async reply(message: Message, content: string): Promise<Message> {
+    return message.reply({ content, allowedMentions: { parse: [], repliedUser: false } });
   }
 }

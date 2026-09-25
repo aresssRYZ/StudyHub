@@ -32,19 +32,23 @@ function setup(generate: (request: AiRequest) => Promise<string>) {
   const primary: AiProvider = { name: 'groq', generate };
   const fallback: AiProvider = { name: 'gemini', generate: async () => 'fallback' };
   const conversations = new ConversationService(new ConversationRepository(database, 20), new AiService(primary, fallback), env);
-  const replies: Array<{ id: string; content: string }> = [];
+  const replies: Array<{ id: string; botMessageId: string; content: string }> = [];
   let nextId = 0;
+  let nextBotId = 0;
 
-  function message(userId: string, content: string, options: { channel?: string; replyToBot?: boolean; id?: string } = {}): Message {
+  function message(userId: string, content: string, options: { channel?: string; replyTo?: string; id?: string } = {}): Message {
     const id = options.id ?? String(++nextId);
     return {
       id, guildId, channelId: options.channel ?? channelId, content,
       author: { id: userId, bot: false }, webhookId: null,
       client: { user: { id: botId } },
-      reference: options.replyToBot ? { messageId: 'original' } : null,
-      fetchReference: async () => ({ author: { id: botId } }),
+      reference: options.replyTo ? { messageId: options.replyTo } : null,
       channel: { sendTyping: async () => undefined },
-      reply: async (payload: { content: string }) => { replies.push({ id, content: payload.content }); return {}; }
+      reply: async (payload: { content: string }) => {
+        const botMessageId = `bot-${++nextBotId}`;
+        replies.push({ id, botMessageId, content: payload.content });
+        return { id: botMessageId };
+      }
     } as unknown as Message;
   }
 
@@ -111,7 +115,7 @@ test('provider HTTP failures distinguish rate limits from invalid credentials', 
   }
 });
 
-test('channel gate, session isolation, close, timeout, and reply reopening', async () => {
+test('only owner replies continue a session; mentions start fresh; timeout resets context', async () => {
   const requests: AiRequest[] = [];
   const { database, conversations, replies, message } = setup(async (request) => { requests.push(request); return `answer ${requests.length}`; });
   try {
@@ -120,23 +124,31 @@ test('channel gate, session isolation, close, timeout, and reply reopening', asy
     assert.equal(requests.length, 0);
 
     await conversations.handleMessage(message('user-a', `<@${botId}> siapa Einstein?`));
+    const firstAnswer = replies.at(-1)!.botMessageId;
     await conversations.handleMessage(message('user-b', 'dia lahir di mana?'));
+    await conversations.handleMessage(message('user-b', 'dia lahir di mana?', { replyTo: firstAnswer }));
     assert.equal(requests.length, 1);
     assert.equal(requests[0]?.userMessage, 'siapa Einstein?');
     await conversations.handleMessage(message('user-a', 'dia lahir di mana?'));
+    assert.equal(requests.length, 1);
+    await conversations.handleMessage(message('user-a', 'dia lahir di mana?', { replyTo: firstAnswer }));
     assert.deepEqual(requests[1]?.history.map((item) => item.role), ['user', 'assistant']);
     assert.equal(requests[1]?.history[0]?.content, 'siapa Einstein?');
 
     await conversations.handleMessage(message('user-a', `<@${botId}> makasih, cukup`));
     await conversations.handleMessage(message('user-a', 'lanjut lagi'));
+    await conversations.handleMessage(message('user-a', 'lanjut lagi', { replyTo: firstAnswer }));
     assert.equal(requests.length, 2);
-    await conversations.handleMessage(message('user-a', 'masih bingung', { replyToBot: true }));
+    await conversations.handleMessage(message('user-a', `<@${botId}> topik baru`));
     assert.equal(requests[2]?.history.length, 0);
+    const newAnswer = replies.at(-1)!.botMessageId;
+    await conversations.handleMessage(message('user-a', 'balas topik lama', { replyTo: firstAnswer }));
+    assert.equal(requests.length, 3);
 
     database.prepare("UPDATE conversation_sessions SET last_activity_at = 1 WHERE user_id = 'user-a' AND status = 'ACTIVE'").run();
     await conversations.handleMessage(message('user-a', 'tanpa mention setelah timeout'));
     assert.equal(requests.length, 3);
-    await conversations.handleMessage(message('user-a', `<@${botId}> mulai lagi`));
+    await conversations.handleMessage(message('user-a', 'mulai lagi', { replyTo: newAnswer }));
     assert.equal(requests[3]?.history.length, 0);
     assert.equal(replies.filter((reply) => reply.content.startsWith('answer')).length, 4);
   } finally {
@@ -154,14 +166,14 @@ test('rapid messages stay ordered, duplicates are ignored, and long replies spli
   });
   try {
     const first = message('user-a', `<@${botId}> pesan satu`, { id: 'same' });
-    const second = message('user-a', 'pesan dua');
-    await Promise.all([
-      conversations.handleMessage(first),
-      conversations.handleMessage(first),
-      conversations.handleMessage(second)
-    ]);
-    assert.equal(requests.length, 2);
+    await Promise.all([conversations.handleMessage(first), conversations.handleMessage(first)]);
+    const firstAnswer = replies[0]!.botMessageId;
+    const second = message('user-a', 'pesan dua', { replyTo: firstAnswer });
+    const third = message('user-a', 'pesan tiga', { replyTo: firstAnswer });
+    await Promise.all([conversations.handleMessage(second), conversations.handleMessage(third)]);
+    assert.equal(requests.length, 3);
     assert.equal(requests[1]?.history[1]?.content, 'jawaban pertama');
+    assert.equal(requests[2]?.history[3]?.content, longText);
     assert.equal(replies[0]?.content, 'jawaban pertama');
     assert.ok(replies.length > 2);
     assert.ok(replies.every((reply) => reply.content.length <= 1900));
@@ -177,7 +189,7 @@ test('AI failure gets a friendly reply and migration remains idempotent', async 
     await conversations.handleMessage(message('user-a', `<@${botId}> halo`));
     assert.match(replies[0]?.content ?? '', /^Maaf, aku lagi susah/);
     migrate(database);
-    assert.equal((database.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get() as { count: number }).count, 2);
+    assert.equal((database.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get() as { count: number }).count, 3);
   } finally {
     database.close();
   }

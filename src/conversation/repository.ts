@@ -43,6 +43,30 @@ export class ConversationRepository {
     };
   }
 
+  getByReply(messageId: string, identity: ConversationIdentity): ConversationSession | undefined {
+    const row = this.database.prepare(`
+      SELECT s.* FROM conversation_sessions s
+      JOIN conversation_reply_links l ON l.conversation_id = s.id
+      WHERE l.message_id = ? AND s.guild_id = ? AND s.channel_id = ? AND s.user_id = ?
+    `).get(messageId, identity.guildId, identity.channelId, identity.userId) as SessionRow | undefined;
+    if (!row) return undefined;
+    return {
+      id: row.id,
+      guildId: row.guild_id,
+      channelId: row.channel_id,
+      userId: row.user_id,
+      status: row.status,
+      createdAt: row.created_at,
+      lastActivityAt: row.last_activity_at,
+      closedAt: row.closed_at
+    };
+  }
+
+  linkReply(messageId: string, conversationId: number): void {
+    this.database.prepare('INSERT INTO conversation_reply_links (message_id, conversation_id) VALUES (?, ?)')
+      .run(messageId, conversationId);
+  }
+
   start(identity: ConversationIdentity, now: number): ConversationSession {
     const result = this.database.prepare(`
       INSERT INTO conversation_sessions

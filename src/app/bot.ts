@@ -84,7 +84,11 @@ export async function startBot(): Promise<void> {
     logger.info('Discord login started');
     try {
       await activeClient.login(env.DISCORD_TOKEN);
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (/disallowed intents/i.test(message)) {
+        throw new DiscordError('Discord login failed: enable Message Content Intent in Developer Portal > Bot > Privileged Gateway Intents.');
+      }
       throw new DiscordError('Discord login failed. Check DISCORD_TOKEN and network access.');
     }
   } catch (error) {
