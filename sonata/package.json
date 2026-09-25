@@ -1,0 +1,13 @@
+{
+  "name": "studyhub-sonata-service",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "postinstall": "node ./fix-package-imports.mjs",
+    "prestart": "node ./fix-package-imports.mjs",
+    "start": "node --env-file=../.env node_modules/@sonata-sdk/server/bin/sonata.js ./config.js"
+  },
+  "dependencies": {
+    "@sonata-sdk/server": "4.1.0"
+  }
+}

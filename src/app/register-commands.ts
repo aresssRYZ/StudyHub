@@ -2,6 +2,7 @@ import { DiscordAPIError, HTTPError, REST, Routes } from 'discord.js';
 import type { Env } from '../config/env.js';
 import { botCommand } from '../commands/bot/status.js';
 import { focusCommand } from '../commands/focus/focus.js';
+import { musicCommands } from '../commands/music/music.js';
 import { DiscordError } from '../shared/errors.js';
 import { logger } from '../shared/logger.js';
 
@@ -9,9 +10,9 @@ export async function registerCommands(env: Env): Promise<void> {
   try {
     const rest = new REST({ version: '10' }).setToken(env.DISCORD_TOKEN);
     await rest.put(Routes.applicationGuildCommands(env.DISCORD_CLIENT_ID, env.DISCORD_GUILD_ID), {
-      body: [botCommand.toJSON(), focusCommand.toJSON()]
+      body: [botCommand.toJSON(), focusCommand.toJSON(), ...musicCommands.map((command) => command.toJSON())]
     });
-    logger.info({ commands: ['/bot status', '/focus'], guildId: env.DISCORD_GUILD_ID }, 'Commands registered');
+    logger.info({ commands: ['/bot status', '/focus', ...musicCommands.map((command) => `/${command.name}`)], guildId: env.DISCORD_GUILD_ID }, 'Commands registered');
   } catch (error) {
     // Only expose numeric API metadata; REST errors also contain request data.
     if (error instanceof DiscordAPIError || error instanceof HTTPError) {

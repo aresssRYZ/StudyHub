@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { ChatInputCommandInteraction, EmbedBuilder, SlashCommandBuilder } from 'discord.js';
 import type { StudyHubDatabase } from '../../database/database.js';
 import type { Env } from '../../config/env.js';
+import type { MusicService } from '../../music/service.js';
 import { formatDuration } from '../../shared/format-duration.js';
 
 const packageJson = JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as { version: string };
@@ -15,7 +16,8 @@ export const botCommand = new SlashCommandBuilder()
 export async function executeBotStatus(
   interaction: ChatInputCommandInteraction,
   database: StudyHubDatabase,
-  env: Env
+  env: Env,
+  music?: MusicService
 ): Promise<void> {
   database.prepare('SELECT 1').get();
 
@@ -28,7 +30,8 @@ export async function executeBotStatus(
       { name: 'Discord Ping', value: `${interaction.client.ws.ping} ms`, inline: true },
       { name: 'Uptime', value: formatDuration(interaction.client.uptime ?? 0), inline: true },
       { name: 'Version', value: packageJson.version, inline: true },
-      { name: 'Environment', value: env.NODE_ENV, inline: true }
+      { name: 'Environment', value: env.NODE_ENV, inline: true },
+      { name: 'Sonata', value: music?.available() ? 'Online' : 'Offline', inline: true }
     );
 
   await interaction.reply({ embeds: [embed] });

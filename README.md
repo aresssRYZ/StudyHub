@@ -1,6 +1,6 @@
 # StudyHub AI
 
-StudyHub AI adalah bot Discord privat untuk kelas dan komunitas kecil. Versi **0.3.0** menyediakan Foundation (`/bot status`, SQLite, migration, logging, dan shutdown), AI text conversation di kanal belajar, serta Focus Room dengan timer dan streak. Panggil bot dengan mention, lalu gunakan fitur Reply pada jawaban bot untuk pertanyaan lanjutan. Music, Voice, dan RVC belum tersedia.
+StudyHub AI adalah bot Discord privat untuk kelas dan komunitas kecil. Versi **0.4.0** menyediakan Foundation (`/bot status`, SQLite, migration, logging, dan shutdown), AI text conversation di kanal belajar, Focus Room dengan timer dan streak, serta Core Music Player berbasis Sonata. Panggil bot dengan mention, lalu gunakan fitur Reply pada jawaban bot untuk pertanyaan lanjutan. Playlist dan Voice AI belum tersedia.
 
 ## Kebutuhan
 
@@ -16,7 +16,7 @@ Project memakai TypeScript strict dengan ESM/`NodeNext`. Ini cocok dengan sistem
 2. Buka halaman **Bot**. Bot user tersedia untuk aplikasi; jika portal meminta membuatnya, pilih **Add Bot**. Aktifkan **Message Content Intent** pada bagian **Privileged Gateway Intents** agar bot dapat membaca isi pesan. **Server Members** dan **Presence Intent** tidak diperlukan.
 3. Pada **General Information**, salin **Application ID** ke `DISCORD_CLIENT_ID`.
 4. Pada **Bot**, gunakan **Reset Token** bila token belum dapat disalin, lalu salin token baru ke `DISCORD_TOKEN` di `.env`. Simpan token hanya di komputer pribadi; jangan kirim melalui chat atau commit ke Git.
-5. Pada **Installation**, aktifkan **Guild Install**. Pilih scope `bot` dan `applications.commands`. Berikan akses **View Channel**, **Send Messages**, dan **Read Message History** pada channel belajar. Jangan pilih Administrator.
+5. Pada **Installation**, aktifkan **Guild Install**. Pilih scope `bot` dan `applications.commands`. Berikan akses **View Channel**, **Send Messages**, dan **Read Message History** pada channel belajar, serta **View Channel**, **Connect**, dan **Speak** pada voice channel musik. Jangan pilih Administrator.
 6. Salin install link dari portal dan pasang aplikasi ke server testing. Akun yang memasang aplikasi harus punya izin mengelola server.
 7. Di aplikasi Discord, aktifkan **Developer Mode** melalui pengaturan Advanced. Klik kanan server testing dan pilih **Copy Server ID** untuk `DISCORD_GUILD_ID`; klik kanan channel belajar dan pilih **Copy Channel ID** untuk `STUDY_CHANNEL_ID`.
 8. Jalankan `npm run register` jika `/bot status` belum terdaftar, lalu `npm run dev`. Ketika log **Discord connected** muncul, coba `/bot status` dan mention bot di channel belajar.
@@ -39,7 +39,7 @@ npm run register
 npm run dev
 ```
 
-`register` mengganti daftar guild command milik aplikasi **di guild yang dipilih** dengan `/bot status` dan `/focus`. Jalankan lagi setelah memperbarui ke Phase 3. Registrasi tidak otomatis dilakukan setiap startup bot.
+`register` mengganti daftar guild command milik aplikasi **di guild yang dipilih** dengan `/bot status`, `/focus`, dan tujuh command musik. Jalankan lagi setelah memperbarui command. Registrasi tidak otomatis dilakukan setiap startup bot.
 
 Build dan jalankan hasil build:
 
@@ -91,7 +91,32 @@ Sesi disimpan di SQLite. Ketika waktu habis, bot menandai sesi selesai dan mengi
 
 Untuk menguji: jalankan `/focus start duration:5`, periksa `/focus status`, lalu `/focus stop` dan `/focus stats`. Uji pemulihan dengan memulai sesi, restart bot, lalu periksa `/focus status`; waktu selesai harus tetap sama. Untuk uji selesai alami, biarkan timer mencapai waktu selesai dan pastikan pemberitahuan muncul serta `/focus stats` bertambah.
 
-Roadmap voice nanti memakai `/ai` untuk kontrol mode Assistant, Casual, dan Curhat. Mode Curhat direncanakan lebih tenang dan empatik, lebih banyak mendengar, tanpa langsung memberi solusi kecuali diminta. Fitur voice belum diimplementasikan.
+Roadmap Voice AI nanti memakai `/ai` untuk kontrol mode Assistant, Casual, dan Curhat. Mode Curhat direncanakan lebih tenang dan empatik, lebih banyak mendengar, tanpa langsung memberi solusi kecuali diminta. Voice AI belum diimplementasikan.
+
+## Phase 4: Core Music Player
+
+StudyHub memakai **Sonata 4.1.0** sebagai proses audio terpisah dan **Shoukaku 4.3.0** sebagai klien Lavalink/Discord voice. Shoukaku dipilih karena masih tersedia sebagai klien TypeScript untuk Lavalink v4 dan discord.js; hanya satu klien Lavalink dipasang. Paket Sonata 4.1.0 memiliki beberapa perbedaan protokol terhadap Lavalink v4. Skrip `sonata/fix-package-imports.mjs` memperbaiki import map paket terbitan, menambah alias WebSocket `/v4/websocket`, dan menjaga reconnect voice saat endpoint hilang. Adapter `SonataProvider` menormalkan respons pencarian dan memakai pesan WebSocket Sonata untuk playback. Konfigurasi Sonata memilih enkripsi AEAD yang diterima Discord dan menonaktifkan silence frame bawaan yang dikirim dengan format keliru. Patch ini khusus versi 4.1.0 dan harus ditinjau ulang sebelum upgrade Sonata.
+
+Command tersedia:
+
+- `/play query:<judul atau URL YouTube>`: putar lagu atau tambahkan ke antrean.
+- `/pause`, `/resume`, `/skip`, `/stop`: kontrol pemutar.
+- `/queue`: tampilkan lagu aktif dan sepuluh lagu berikutnya.
+- `/volume value:<0-100>`: atur volume, default 50%.
+
+Pengguna harus berada di voice channel untuk `/play` dan seluruh kontrol; setelah bot bergabung, kontrol hanya berlaku dari voice channel yang sama. `/queue` dapat dibaca tanpa masuk voice. Antrean per server disimpan di memori dan hilang saat restart. Saat antrean kosong, bot menunggu 180 detik sebelum keluar dari voice. YouTube adalah satu-satunya sumber Phase 4. Focus Room tidak otomatis memutar musik; playlist direncanakan untuk Phase 5.
+
+### Menjalankan Sonata di Windows 11
+
+1. Gunakan Node.js 24. Dari root project, jalankan `npm.cmd install` lalu `npm.cmd --prefix sonata install`.
+2. Tambahkan variabel `SONATA_HOST`, `SONATA_PORT`, `SONATA_PASSWORD`, `SONATA_SECURE`, `MUSIC_DEFAULT_VOLUME`, dan `MUSIC_IDLE_TIMEOUT_SECONDS` dari `.env.example` ke `.env` yang sudah ada. Buat password acak panjang dan gunakan **nilai yang sama** untuk bot dan Sonata. Jangan commit `.env`.
+3. Terminal pertama: `npm.cmd --prefix sonata start`. Tunggu log `Server listening on 127.0.0.1:2333`.
+4. Terminal kedua: `npm.cmd run register` lalu `npm.cmd run build` dan `npm.cmd start`. Tunggu log `Discord connected` dan `Sonata connected`, lalu coba `/bot status` (Sonata Online).
+5. Hentikan masing-masing proses dengan Ctrl+C di terminalnya. Sonata tidak akan dimatikan otomatis ketika bot berhenti.
+
+Sonata default mendengar pada `127.0.0.1:2333`; host loopback membatasi koneksi ke komputer lokal. Uji listener Windows dengan `Test-NetConnection 127.0.0.1 -Port 2333`. Jika Sonata belum berjalan, bot tetap dapat menjalankan Foundation, AI, dan Focus; command musik memberi pesan offline. Setelah Sonata hidup, adapter mencoba menyambung ulang dengan jeda yang meningkat sampai 60 detik. Untuk Linux Mint nanti, jalankan Sonata dan StudyHub sebagai dua service terpisah dengan working directory project yang benar; panduan service produksi belum menjadi bagian Phase 4.
+
+Jika `npm.cmd run dev` gagal di Windows dengan `uv_os_get_passwd` dari `tsx`, gunakan `npm.cmd run build` dan `npm.cmd start`. Skrip `npm.cmd test` memakai JavaScript hasil kompilasi untuk menghindari kegagalan lingkungan tersebut.
 
 ## Checklist uji AI text
 

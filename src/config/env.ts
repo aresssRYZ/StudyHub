@@ -19,6 +19,12 @@ const envSchema = z.object({
   APP_TIMEZONE: z.string().refine((value) => {
     try { new Intl.DateTimeFormat('en-US', { timeZone: value }); return true; } catch { return false; }
   }).default('Asia/Jakarta'),
+  SONATA_HOST: z.string().min(1).default('127.0.0.1'),
+  SONATA_PORT: z.coerce.number().int().min(1).max(65535).default(2333),
+  SONATA_PASSWORD: z.string().min(1),
+  SONATA_SECURE: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  MUSIC_DEFAULT_VOLUME: z.coerce.number().int().min(0).max(100).default(50),
+  MUSIC_IDLE_TIMEOUT_SECONDS: z.coerce.number().int().min(10).max(3600).default(180),
   DATABASE_PATH: z.string().min(1),
   NODE_ENV: z.enum(['development', 'production', 'test'])
 }).refine((value) => value.FOCUS_MIN_DURATION_MINUTES <= value.FOCUS_MAX_DURATION_MINUTES, {
