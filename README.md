@@ -1,6 +1,6 @@
 # StudyHub AI
 
-StudyHub AI adalah bot Discord privat untuk kelas dan komunitas kecil. Versi **0.2.0** mempertahankan Foundation (`/bot status`, SQLite, migration, logging, dan shutdown) serta menambahkan AI text conversation di satu channel belajar. Panggil bot dengan mention, lalu gunakan fitur Reply pada jawaban bot untuk pertanyaan lanjutan. Voice, Focus, Music, dan RVC belum tersedia.
+StudyHub AI adalah bot Discord privat untuk kelas dan komunitas kecil. Versi **0.3.0** menyediakan Foundation (`/bot status`, SQLite, migration, logging, dan shutdown), AI text conversation di kanal belajar, serta Focus Room dengan timer dan streak. Panggil bot dengan mention, lalu gunakan fitur Reply pada jawaban bot untuk pertanyaan lanjutan. Music, Voice, dan RVC belum tersedia.
 
 ## Kebutuhan
 
@@ -32,14 +32,14 @@ npm install
 Copy-Item .env.example .env
 ```
 
-Isi `.env` dengan token, Application ID, Guild ID, Channel ID belajar, serta API key Groq dan Gemini. Pada instalasi Foundation yang sudah berjalan, **tambahkan variabel baru dari `.env.example` ke `.env` yang ada**; jangan menimpa token lama dengan file contoh. `GROQ_MODEL` dan `GEMINI_MODEL` dapat diganti tanpa mengubah source. Nilai `DATABASE_PATH=./data/studyhub.db`, `AI_SESSION_TIMEOUT_MINUTES=20`, dan `AI_MAX_CONTEXT_MESSAGES=20` dapat dibiarkan. Kedua API key wajib agar konfigurasi valid saat startup. Pada PowerShell dengan execution policy yang menghalangi `npm.ps1`, gunakan `npm.cmd` untuk semua perintah npm.
+Isi `.env` dengan token, Application ID, Guild ID, Channel ID belajar, serta API key Groq dan Gemini. Pada instalasi yang sudah berjalan, **tambahkan variabel baru dari `.env.example` ke `.env` yang ada**; jangan menimpa token lama dengan file contoh. `GROQ_MODEL` dan `GEMINI_MODEL` dapat diganti tanpa mengubah source. Nilai `DATABASE_PATH=./data/studyhub.db`, `AI_SESSION_TIMEOUT_MINUTES=20`, `AI_MAX_CONTEXT_MESSAGES=20`, `FOCUS_MIN_DURATION_MINUTES=5`, `FOCUS_MAX_DURATION_MINUTES=180`, dan `APP_TIMEZONE=Asia/Jakarta` dapat dibiarkan. Tiga variabel Focus mempunyai default sehingga `.env` lama tetap valid. Kedua API key wajib agar konfigurasi valid saat startup. Pada PowerShell dengan execution policy yang menghalangi `npm.ps1`, gunakan `npm.cmd` untuk semua perintah npm.
 
 ```powershell
 npm run register
 npm run dev
 ```
 
-`register` mengganti daftar guild command milik aplikasi **di guild yang dipilih** dengan command yang ada di project ini. Pada server testing khusus StudyHub, ini membuat `/bot status` cepat muncul. Registrasi tidak otomatis dilakukan setiap startup bot.
+`register` mengganti daftar guild command milik aplikasi **di guild yang dipilih** dengan `/bot status` dan `/focus`. Jalankan lagi setelah memperbarui ke Phase 3. Registrasi tidak otomatis dilakukan setiap startup bot.
 
 Build dan jalankan hasil build:
 
@@ -79,6 +79,17 @@ AI hanya memproses pesan di `STUDY_CHANNEL_ID`. Mention memulai topik baru untuk
 Groq adalah provider utama. Gemini digunakan jika Groq mengalami rate limit, timeout, gangguan jaringan, atau error server. Error kredensial atau request yang tidak valid tidak dialihkan ke Gemini. Bot mengirim maksimal 20 pesan terbaru sebagai konteks dan menyimpan hanya 20 pesan terbaru per sesi di SQLite. Jawaban panjang dipecah agar sesuai batas Discord. Log mencatat metadata request, bukan isi chat atau API key.
 
 API Groq memakai [Chat Completions](https://console.groq.com/docs/api-reference); Gemini memakai [generateContent](https://ai.google.dev/api/generate-content). Model contoh di `.env.example` dapat berubah ketersediaannya menurut akun/provider; periksa model yang tersedia di [Groq](https://console.groq.com/docs/models) dan [Gemini](https://ai.google.dev/gemini-api/docs/models).
+
+## Focus Room
+
+- `/focus start duration:25` memulai satu sesi fokus per pengguna dalam server. Durasi default yang diizinkan 5–180 menit.
+- `/focus status` menampilkan waktu mulai, perkiraan selesai, sisa waktu, dan streak.
+- `/focus stop` menghentikan sesi; waktu dari sesi yang dihentikan tidak masuk statistik.
+- `/focus stats` menampilkan jumlah sesi selesai, total menit fokus, streak saat ini, dan streak terbaik.
+
+Sesi disimpan di SQLite. Ketika waktu habis, bot menandai sesi selesai dan mengirim pemberitahuan teks di kanal tempat sesi dimulai. Jika bot restart, sesi aktif dipulihkan menurut waktu selesai yang tersimpan; sesi yang sudah lewat saat offline ditandai selesai. Kegagalan mengirim pemberitahuan tidak membatalkan penyelesaian sesi. Streak dihitung dari hari dengan minimal satu sesi selesai memakai `APP_TIMEZONE` (default `Asia/Jakarta`). Tidak ada pemanggilan Groq/Gemini untuk Focus Room.
+
+Untuk menguji: jalankan `/focus start duration:5`, periksa `/focus status`, lalu `/focus stop` dan `/focus stats`. Uji pemulihan dengan memulai sesi, restart bot, lalu periksa `/focus status`; waktu selesai harus tetap sama. Untuk uji selesai alami, biarkan timer mencapai waktu selesai dan pastikan pemberitahuan muncul serta `/focus stats` bertambah.
 
 Roadmap voice nanti memakai `/ai` untuk kontrol mode Assistant, Casual, dan Curhat. Mode Curhat direncanakan lebih tenang dan empatik, lebih banyak mendengar, tanpa langsung memberi solusi kecuali diminta. Fitur voice belum diimplementasikan.
 

@@ -10,12 +10,15 @@ import { ConversationService } from '../conversation/conversation-service.js';
 import { AiService } from '../ai/ai-service.js';
 import { GroqProvider } from '../ai/providers/groq.js';
 import { GeminiProvider } from '../ai/providers/gemini.js';
+import { FocusRepository } from '../focus/repository.js';
+import { FocusService } from '../focus/service.js';
 import { DiscordError, errorDetails } from '../shared/errors.js';
 import { configureLogger, logger } from '../shared/logger.js';
 
 export async function startBot(): Promise<void> {
   let database: StudyHubDatabase | undefined;
   let client: Client | undefined;
+  let focus: FocusService | undefined;
   let shuttingDown = false;
 
   const shutdown = async (exitCode: number): Promise<void> => {
@@ -23,6 +26,7 @@ export async function startBot(): Promise<void> {
     shuttingDown = true;
     process.exitCode = exitCode;
     logger.info('Shutting down StudyHub');
+    focus?.dispose();
     if (client) {
       try {
         await client.destroy();
@@ -75,8 +79,17 @@ export async function startBot(): Promise<void> {
 
     client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
     const activeClient = client;
+    focus = new FocusService(new FocusRepository(activeDatabase), env, async (session) => {
+      const channel = await activeClient.channels.fetch(session.channelId);
+      if (!channel?.isSendable()) throw new DiscordError('Focus notification channel is unavailable.');
+      await channel.send({
+        content: `<@${session.userId}> ⏰ Sesi fokus ${session.durationMinutes} menit selesai. Mantap!`,
+        allowedMentions: { users: [session.userId] }
+      });
+    });
+    const activeFocus = focus;
     client.once(Events.ClientReady, (readyClient) => onReady(readyClient));
-    client.on(Events.InteractionCreate, (interaction) => onInteractionCreate(interaction, activeDatabase, env));
+    client.on(Events.InteractionCreate, (interaction) => onInteractionCreate(interaction, activeDatabase, env, activeFocus));
     client.on(Events.MessageCreate, (message) => onMessageCreate(message, conversations));
     client.on(Events.Error, (error) => logger.error(errorDetails(error), 'Discord client error'));
     client.on(Events.Warn, (message) => logger.warn({ message }, 'Discord client warning'));
@@ -91,6 +104,7 @@ export async function startBot(): Promise<void> {
       }
       throw new DiscordError('Discord login failed. Check DISCORD_TOKEN and network access.');
     }
+    await activeFocus.recover();
   } catch (error) {
     logger.error(errorDetails(error), 'StudyHub startup failed');
     await shutdown(1);

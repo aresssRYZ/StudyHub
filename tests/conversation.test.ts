@@ -22,7 +22,8 @@ const env = {
   DISCORD_TOKEN: 'test', DISCORD_CLIENT_ID: botId, DISCORD_GUILD_ID: guildId,
   STUDY_CHANNEL_ID: channelId, GROQ_API_KEY: 'test', GROQ_MODEL: 'test',
   GEMINI_API_KEY: 'test', GEMINI_MODEL: 'test', DATABASE_PATH: ':memory:',
-  NODE_ENV: 'test', AI_SESSION_TIMEOUT_MINUTES: 20, AI_MAX_CONTEXT_MESSAGES: 20
+  NODE_ENV: 'test', AI_SESSION_TIMEOUT_MINUTES: 20, AI_MAX_CONTEXT_MESSAGES: 20,
+  FOCUS_MIN_DURATION_MINUTES: 5, FOCUS_MAX_DURATION_MINUTES: 180, APP_TIMEZONE: 'Asia/Jakarta'
 } satisfies Env;
 
 function setup(generate: (request: AiRequest) => Promise<string>) {
@@ -189,7 +190,7 @@ test('AI failure gets a friendly reply and migration remains idempotent', async 
     await conversations.handleMessage(message('user-a', `<@${botId}> halo`));
     assert.match(replies[0]?.content ?? '', /^Maaf, aku lagi susah/);
     migrate(database);
-    assert.equal((database.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get() as { count: number }).count, 3);
+    assert.equal((database.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get() as { count: number }).count, 4);
   } finally {
     database.close();
   }

@@ -14,8 +14,15 @@ const envSchema = z.object({
   GEMINI_MODEL: z.string().min(1),
   AI_SESSION_TIMEOUT_MINUTES: z.coerce.number().int().min(1).max(1440).default(20),
   AI_MAX_CONTEXT_MESSAGES: z.coerce.number().int().min(2).max(40).refine((value) => value % 2 === 0).default(20),
+  FOCUS_MIN_DURATION_MINUTES: z.coerce.number().int().min(1).max(180).default(5),
+  FOCUS_MAX_DURATION_MINUTES: z.coerce.number().int().min(5).max(1440).default(180),
+  APP_TIMEZONE: z.string().refine((value) => {
+    try { new Intl.DateTimeFormat('en-US', { timeZone: value }); return true; } catch { return false; }
+  }).default('Asia/Jakarta'),
   DATABASE_PATH: z.string().min(1),
   NODE_ENV: z.enum(['development', 'production', 'test'])
+}).refine((value) => value.FOCUS_MIN_DURATION_MINUTES <= value.FOCUS_MAX_DURATION_MINUTES, {
+  path: ['FOCUS_MAX_DURATION_MINUTES'], message: 'must be at least FOCUS_MIN_DURATION_MINUTES'
 });
 
 export type Env = z.infer<typeof envSchema>;
