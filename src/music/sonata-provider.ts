@@ -18,7 +18,7 @@ function normalize(data: unknown, requesterId: string): MusicTrack | null {
   const metadata = info as Record<string, unknown>;
   return {
     encoded: candidate.encoded,
-    title: typeof metadata.title === 'string' ? metadata.title.slice(0, 180) : 'Judul tidak tersedia',
+    title: typeof metadata.title === 'string' && metadata.title.trim() ? metadata.title.trim().slice(0, 180) : 'Judul tidak tersedia',
     uri: typeof metadata.uri === 'string' ? metadata.uri : '',
     durationMs: typeof metadata.length === 'number' ? metadata.length : 0,
     requesterId,

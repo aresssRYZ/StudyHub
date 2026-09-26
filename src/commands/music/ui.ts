@@ -8,9 +8,12 @@ type Snapshot = NonNullable<ReturnType<MusicService['snapshot']>>;
 type Action = 'pause' | 'resume' | 'skip' | 'stop' | 'queue' | 'volume_down' | 'volume_up';
 const actions = new Set<Action>(['pause', 'resume', 'skip', 'stop', 'queue', 'volume_down', 'volume_up']);
 
-function buttonEmoji(action: Action, fallback: string): string | { id: string; name: string } {
-  const id = process.env[`MUSIC_EMOJI_${action.toUpperCase()}`];
-  return id && /^\d{17,20}$/.test(id) ? { id, name: `studyhub_${action}` } : fallback;
+function control(action: Action, label: string, disabled: boolean, style = ButtonStyle.Secondary): ButtonBuilder {
+  return new ButtonBuilder().setCustomId(`music:${action}`).setLabel(label).setStyle(style).setDisabled(disabled);
+}
+
+function upcoming(id: string, label: string): ButtonBuilder {
+  return new ButtonBuilder().setCustomId(`music:upcoming_${id}`).setLabel(label).setStyle(ButtonStyle.Secondary).setDisabled(true);
 }
 
 const safe = (value: string): string => value.replace(/\s+/g, ' ').replace(/[@`*_~|>\\]/g, '\\$&').slice(0, 100);
@@ -47,7 +50,7 @@ export function musicView(snapshot: Snapshot | null, content = '') {
   const embed = new EmbedBuilder()
     .setColor(current ? (snapshot.paused ? 0xD9A75F : 0x7289DA) : 0x747F8D)
     .setAuthor({ name: 'STUDYHUB  •  MUSIC' })
-    .setTitle(current ? safe(current.title) : 'Pemutar musik')
+    .setTitle(current ? safe(current.title) || 'Judul tidak tersedia' : 'Pemutar musik')
     .setDescription(current
       ? `**${snapshot.paused ? '⏸  DIJEDA' : '♫  NOW PLAYING'}**\n${current.author ? `${safe(current.author)}\n` : ''}\n${progress(snapshot.positionMs, current.durationMs)}`
       : 'Belum ada lagu yang sedang diputar.')
@@ -66,18 +69,28 @@ export function musicView(snapshot: Snapshot | null, content = '') {
       .map((track, index) => `${index + 1}. ${safe(track.title)}`).join('\n') });
   }
   if (snapshot) embed.addFields({ name: 'Voice channel', value: `<#${snapshot.voiceChannelId}>`, inline: false });
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('music:resume').setEmoji(buttonEmoji('resume', '▶️')).setStyle(ButtonStyle.Secondary).setDisabled(!current || !snapshot.paused),
-    new ButtonBuilder().setCustomId('music:pause').setEmoji(buttonEmoji('pause', '⏸️')).setStyle(ButtonStyle.Secondary).setDisabled(!current || snapshot.paused),
-    new ButtonBuilder().setCustomId('music:skip').setEmoji(buttonEmoji('skip', '⏭️')).setStyle(ButtonStyle.Secondary).setDisabled(!current),
-    new ButtonBuilder().setCustomId('music:stop').setEmoji(buttonEmoji('stop', '⏹️')).setStyle(ButtonStyle.Danger).setDisabled(!snapshot),
-    new ButtonBuilder().setCustomId('music:queue').setEmoji(buttonEmoji('queue', '☰')).setStyle(ButtonStyle.Secondary)
+  const playbackRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    control('resume', '▶', !current || !snapshot.paused),
+    upcoming('prev', '|◁'),
+    control('pause', '❚❚', !current || snapshot.paused),
+    control('skip', '▷|', !current),
+    upcoming('loop', '↻')
   );
   const volumeRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('music:volume_down').setEmoji(buttonEmoji('volume_down', '➖')).setStyle(ButtonStyle.Secondary).setDisabled(!snapshot || snapshot.volume === 0),
-    new ButtonBuilder().setCustomId('music:volume_up').setEmoji(buttonEmoji('volume_up', '➕')).setStyle(ButtonStyle.Secondary).setDisabled(!snapshot || snapshot.volume === 100)
+    control('volume_down', '—', !snapshot || snapshot.volume === 0),
+    upcoming('rewind', '≪'),
+    upcoming('like', '♡'),
+    upcoming('forward', '≫'),
+    control('volume_up', '＋', !snapshot || snapshot.volume === 100)
   );
-  return { content, embeds: [embed], components: [row, volumeRow], allowedMentions: { parse: [] as [] } };
+  const extraRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    upcoming('lyrics', '♪'),
+    upcoming('shuffle', '⤨'),
+    control('stop', '■', !snapshot),
+    upcoming('filter', '❖'),
+    control('queue', '☰', false)
+  );
+  return { content, embeds: [embed], components: [playbackRow, volumeRow, extraRow], allowedMentions: { parse: [] as [] } };
 }
 
 function queueText(snapshot: Snapshot | null): string {

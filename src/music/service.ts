@@ -85,13 +85,16 @@ export class MusicService {
     const session = this.sessions.get(guildId);
     if (!session?.current || (encoded && session.current.encoded !== encoded)) return;
     session.current = null;
-    session.paused = false;
     logger.info({ guildId, failed }, failed ? 'Track failed' : 'Track finished');
     if (failed) await this.safeNotice(session.textChannelId, 'Lagu ini gagal diputar, aku coba lanjut ke antrean berikutnya.');
     const next = await this.startNext(guildId, session);
     if (next) await this.safeNotice(session.textChannelId, `Sekarang memutar: ${next.title}`);
   }
   private async startNext(guildId: string, session: Session): Promise<MusicTrack | null> {
+    if (session.paused) {
+      await this.provider.pause(guildId, false);
+      session.paused = false;
+    }
     while (session.queue.length) {
       const next = session.queue.shift()!;
       try {
@@ -111,8 +114,8 @@ export class MusicService {
     return this.serial(guildId, async () => {
       const session = this.sessions.get(guildId);
       if (!session?.current) throw new Error('Tidak ada lagu yang sedang diputar.');
-      session.current = null;
       await this.provider.stopTrack(guildId);
+      session.current = null;
       logger.info({ guildId }, 'Track skipped');
       return this.startNext(guildId, session);
     });

@@ -14,6 +14,7 @@ class FakeProvider implements MusicProvider {
   paused: boolean[] = [];
   levels: number[] = [];
   failOnPlay = new Set<string>();
+  failOnStop = false;
   onEnd?: MusicProvider['onEnd'];
   onFailure?: MusicProvider['onFailure'];
   onOffline?: MusicProvider['onOffline'];
@@ -28,7 +29,10 @@ class FakeProvider implements MusicProvider {
     if (this.failOnPlay.has(track.encoded)) throw new Error('simulated playback failure');
   }
   async pause(_guildId: string, paused: boolean): Promise<void> { this.paused.push(paused); }
-  async stopTrack(): Promise<void> { /* Shoukaku emits 'stopped' later. */ }
+  async stopTrack(): Promise<void> {
+    if (this.failOnStop) throw new Error('simulated stop failure');
+    /* Shoukaku emits 'stopped' later. */
+  }
   async volume(_guildId: string, level: number): Promise<void> { this.levels.push(level); }
   async leave(guildId: string): Promise<void> { this.left.push(guildId); }
 }
@@ -75,6 +79,33 @@ test('skip advances once and ignores stopped/replaced end events', async () => {
   await music.stop('a');
   assert.equal(music.snapshot('a'), null);
   assert.deepEqual(provider.left, ['a']);
+});
+
+test('failed skip keeps current track and queue intact', async () => {
+  const provider = new FakeProvider();
+  const music = new MusicService(provider, 50, 10, async () => undefined);
+  await music.play('a', 'v', 't', 'one', 'u');
+  await music.play('a', 'v', 't', 'two', 'u');
+  provider.failOnStop = true;
+  await assert.rejects(music.skip('a'), /simulated stop failure/);
+  assert.equal(music.snapshot('a')?.current?.title, 'one');
+  assert.deepEqual(music.snapshot('a')?.queue.map((track) => track.title), ['two']);
+  provider.failOnStop = false;
+  assert.equal((await music.skip('a'))?.title, 'two');
+  await music.dispose();
+});
+
+test('skip resumes the player before starting the next song', async () => {
+  const provider = new FakeProvider();
+  const music = new MusicService(provider, 50, 10, async () => undefined);
+  await music.play('a', 'v', 't', 'one', 'u');
+  await music.play('a', 'v', 't', 'two', 'u');
+  await music.pause('a', true);
+  await music.skip('a');
+  assert.equal(music.snapshot('a')?.current?.title, 'two');
+  assert.equal(music.snapshot('a')?.paused, false);
+  assert.deepEqual(provider.paused, [true, false]);
+  await music.dispose();
 });
 
 test('missing track and offline node do not create a player', async () => {
@@ -211,18 +242,23 @@ test('music panel shows artwork and progress only from safe YouTube URLs', () =>
   assert.match(embed.description ?? '', /1:05.*3:19/);
   const rows = musicView(snapshot).components.map((row) => row.toJSON().components);
   assert.deepEqual(rows.map((row) => row.map((button) => 'custom_id' in button ? button.custom_id : null)), [
-    ['music:resume', 'music:pause', 'music:skip', 'music:stop', 'music:queue'],
-    ['music:volume_down', 'music:volume_up']
+    ['music:resume', 'music:upcoming_prev', 'music:pause', 'music:skip', 'music:upcoming_loop'],
+    ['music:volume_down', 'music:upcoming_rewind', 'music:upcoming_like', 'music:upcoming_forward', 'music:volume_up'],
+    ['music:upcoming_lyrics', 'music:upcoming_shuffle', 'music:stop', 'music:upcoming_filter', 'music:queue']
   ]);
-  assert.ok(rows.flat().every((button) => 'emoji' in button && button.emoji && !('label' in button && button.label)));
-  process.env.MUSIC_EMOJI_RESUME = '123456789012345678';
-  try {
-    const custom = musicView({ ...snapshot, paused: true }).components[0]?.toJSON().components[0];
-    assert.ok(custom && 'emoji' in custom);
-    assert.equal(custom.emoji?.id, '123456789012345678');
-  } finally { delete process.env.MUSIC_EMOJI_RESUME; }
+  assert.deepEqual(rows.map((row) => row.map((button) => 'label' in button ? button.label : null)), [
+    ['▶', '|◁', '❚❚', '▷|', '↻'],
+    ['—', '≪', '♡', '≫', '＋'],
+    ['♪', '⤨', '■', '❖', '☰']
+  ]);
+  assert.ok(rows.flat().every((button) => !('emoji' in button && button.emoji)));
+  assert.ok(rows.flat().filter((button) => 'custom_id' in button && button.custom_id.startsWith('music:upcoming_'))
+    .every((button) => 'disabled' in button && button.disabled));
   const unsafePanel = musicView({ ...snapshot, current: { ...track, artworkUrl: 'http://example.com/cover.png' } }).embeds[0];
   assert.ok(unsafePanel);
   const unsafe = unsafePanel.toJSON();
   assert.equal(unsafe.image, undefined);
+  const untitled = musicView({ ...snapshot, current: { ...track, title: '' } }).embeds[0];
+  assert.ok(untitled);
+  assert.equal(untitled.toJSON().title, 'Judul tidak tersedia');
 });
