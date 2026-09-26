@@ -104,15 +104,17 @@ Command tersedia:
 - `/queue`: tampilkan lagu aktif dan sepuluh lagu berikutnya.
 - `/volume value:<0-100>`: atur volume, default 50%.
 
+Respons pemutar menampilkan cover lagu besar (jika tersedia), judul, artis, progres, peminta lagu, volume, antrean, dan tombol Pause, Resume, Skip, Stop, Queue, serta Volume −10/+10. Progres pada pesan diperbarui saat panel dibuat atau tombol ditekan. Tombol Queue menampilkan antrean terbaru secara privat; tombol lain hanya dapat dipakai anggota di voice channel bot. Panel yang lebih lama tetap mengontrol lagu yang sedang aktif saat tombol ditekan.
+
 Pengguna harus berada di voice channel untuk `/play` dan seluruh kontrol; setelah bot bergabung, kontrol hanya berlaku dari voice channel yang sama. `/queue` dapat dibaca tanpa masuk voice. Antrean per server disimpan di memori dan hilang saat restart. Saat antrean kosong, bot menunggu 180 detik sebelum keluar dari voice. YouTube adalah satu-satunya sumber Phase 4. Focus Room tidak otomatis memutar musik; playlist direncanakan untuk Phase 5.
 
 ### Menjalankan Sonata di Windows 11
 
 1. Gunakan Node.js 24. Dari root project, jalankan `npm.cmd install` lalu `npm.cmd --prefix sonata install`.
 2. Tambahkan variabel `SONATA_HOST`, `SONATA_PORT`, `SONATA_PASSWORD`, `SONATA_SECURE`, `MUSIC_DEFAULT_VOLUME`, dan `MUSIC_IDLE_TIMEOUT_SECONDS` dari `.env.example` ke `.env` yang sudah ada. Buat password acak panjang dan gunakan **nilai yang sama** untuk bot dan Sonata. Jangan commit `.env`.
-3. Terminal pertama: `npm.cmd --prefix sonata start`. Tunggu log `Server listening on 127.0.0.1:2333`.
-4. Terminal kedua: `npm.cmd run register` lalu `npm.cmd run build` dan `npm.cmd start`. Tunggu log `Discord connected` dan `Sonata connected`, lalu coba `/bot status` (Sonata Online).
-5. Hentikan masing-masing proses dengan Ctrl+C di terminalnya. Sonata tidak akan dimatikan otomatis ketika bot berhenti.
+3. Untuk development, jalankan `npm.cmd run dev` dari root project. Skrip ini menyalakan Sonata bila portnya belum aktif, menunggu sampai siap, lalu menjalankan bot dalam mode watch. Hentikan keduanya dengan Ctrl+C. Jika Sonata sudah dijalankan terpisah, skrip memakai proses yang ada dan tidak membuat proses Sonata kedua.
+4. Untuk menjalankan hasil build, terminal pertama: `npm.cmd --prefix sonata start`. Tunggu log `Server listening on 127.0.0.1:2333`. Terminal kedua: `npm.cmd run register`, lalu `npm.cmd run build` dan `npm.cmd start`. Tunggu log `Discord connected` dan `Sonata connected`, lalu coba `/bot status` (Sonata Online).
+5. Pada cara hasil build, hentikan masing-masing proses dengan Ctrl+C di terminalnya. Sonata tidak akan dimatikan otomatis ketika bot berhenti.
 
 Sonata default mendengar pada `127.0.0.1:2333`; host loopback membatasi koneksi ke komputer lokal. Uji listener Windows dengan `Test-NetConnection 127.0.0.1 -Port 2333`. Jika Sonata belum berjalan, bot tetap dapat menjalankan Foundation, AI, dan Focus; command musik memberi pesan offline. Setelah Sonata hidup, adapter mencoba menyambung ulang dengan jeda yang meningkat sampai 60 detik. Untuk Linux Mint nanti, jalankan Sonata dan StudyHub sebagai dua service terpisah dengan working directory project yang benar; panduan service produksi belum menjadi bagian Phase 4.
 

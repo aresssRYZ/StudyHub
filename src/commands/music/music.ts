@@ -1,5 +1,6 @@
 import { ChatInputCommandInteraction, GuildMember, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import type { MusicService } from '../../music/service.js';
+import { musicView } from './ui.js';
 
 export const musicCommands = [
   new SlashCommandBuilder().setName('play').setDescription('Putar lagu YouTube atau tambahkan ke antrean')
@@ -49,7 +50,7 @@ export async function executeMusic(interaction: ChatInputCommandInteraction, ser
         ? `Sekarang memutar: ${safe(result.track.title)} (${duration(result.track.durationMs)})`
         : `Ditambahkan ke antrean #${result.position}: ${safe(result.track.title)} (${duration(result.track.durationMs)})`;
     } catch (error) { content = error instanceof Error ? error.message : 'Gagal memutar lagu.'; }
-    await interaction.editReply({ content, allowedMentions: { parse: [] } });
+    await interaction.editReply(musicView(service.snapshot(guild.id), content));
     return;
   }
   let content: string;
@@ -74,5 +75,5 @@ export async function executeMusic(interaction: ChatInputCommandInteraction, ser
   } catch (error) {
     content = error instanceof Error ? error.message : 'Perintah musik gagal.';
   }
-  await interaction.editReply({ content, allowedMentions: { parse: [] } });
+  await interaction.editReply(musicView(service.snapshot(guild.id), content));
 }

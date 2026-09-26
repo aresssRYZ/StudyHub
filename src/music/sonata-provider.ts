@@ -22,7 +22,9 @@ function normalize(data: unknown, requesterId: string): MusicTrack | null {
     uri: typeof metadata.uri === 'string' ? metadata.uri : '',
     durationMs: typeof metadata.length === 'number' ? metadata.length : 0,
     requesterId,
-    source: typeof metadata.sourceName === 'string' ? metadata.sourceName : 'youtube'
+    source: typeof metadata.sourceName === 'string' ? metadata.sourceName : 'youtube',
+    author: typeof metadata.author === 'string' ? metadata.author.slice(0, 100) : undefined,
+    artworkUrl: typeof metadata.artworkUrl === 'string' ? metadata.artworkUrl : undefined
   };
 }
 
@@ -75,6 +77,7 @@ export class SonataProvider implements MusicProvider {
   }
 
   available(): boolean { return this.shoukaku.getIdealNode()?.state === 1; }
+  position(guildId: string): number { return this.players.get(guildId)?.position ?? 0; }
 
   async resolve(query: string, requesterId: string): Promise<MusicTrack | null> {
     const trimmed = query.trim();

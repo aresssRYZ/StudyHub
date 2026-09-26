@@ -3,7 +3,8 @@ import test from 'node:test';
 import { MusicService } from '../src/music/service.js';
 import type { MusicProvider, MusicTrack } from '../src/music/types.js';
 import { executeMusic } from '../src/commands/music/music.js';
-import type { ChatInputCommandInteraction } from 'discord.js';
+import { executeMusicButton, musicView } from '../src/commands/music/ui.js';
+import type { ButtonInteraction, ChatInputCommandInteraction } from 'discord.js';
 
 class FakeProvider implements MusicProvider {
   online = true;
@@ -152,4 +153,64 @@ test('play requires voice and controls reject another voice channel', async () =
   assert.match(replies[1] ?? '', /voice channel tempat bot/);
   assert.deepEqual(provider.paused, []);
   await music.dispose();
+});
+
+test('music buttons update state and block listeners from another voice channel', async () => {
+  const provider = new FakeProvider();
+  const music = new MusicService(provider, 50, 10, async () => undefined);
+  await music.play('a', 'voice-a', 'text-a', 'one', 'u');
+  await music.play('a', 'voice-a', 'text-a', 'two', 'u');
+  const events: string[] = [];
+  const edits: Array<{ embeds: Array<{ toJSON(): { description?: string } }> }> = [];
+  let voiceId = 'voice-a';
+  const interaction = {
+    customId: 'music:pause',
+    guild: { id: 'a', members: { fetch: async () => { events.push('fetch'); return { voice: { channel: { id: voiceId } } }; } } },
+    member: null, user: { id: 'u' },
+    deferUpdate: async () => { events.push('defer'); },
+    editReply: async (value: typeof edits[number]) => { edits.push(value); },
+    followUp: async () => { events.push('denied'); }
+  } as unknown as ButtonInteraction;
+  await executeMusicButton(interaction, music);
+  assert.deepEqual(events.slice(0, 2), ['defer', 'fetch']);
+  assert.equal(music.snapshot('a')?.paused, true);
+  assert.match(edits.at(-1)?.embeds[0]?.toJSON().description ?? '', /Dijeda/);
+  Object.assign(interaction, { customId: 'music:resume' });
+  await executeMusicButton(interaction, music);
+  assert.equal(music.snapshot('a')?.paused, false);
+  Object.assign(interaction, { customId: 'music:volume_up' });
+  await executeMusicButton(interaction, music);
+  assert.equal(music.snapshot('a')?.volume, 60);
+  voiceId = 'voice-b';
+  Object.assign(interaction, { customId: 'music:skip' });
+  await executeMusicButton(interaction, music);
+  assert.equal(music.snapshot('a')?.current?.title, 'one');
+  assert.ok(events.includes('denied'));
+  voiceId = 'voice-a';
+  await executeMusicButton(interaction, music);
+  assert.equal(music.snapshot('a')?.current?.title, 'two');
+  Object.assign(interaction, { customId: 'music:stop' });
+  await executeMusicButton(interaction, music);
+  assert.equal(music.snapshot('a'), null);
+});
+
+test('music panel shows artwork and progress only from safe YouTube URLs', () => {
+  const track: MusicTrack = {
+    encoded: 'one', title: 'Heather', author: 'Conan Gray',
+    uri: 'https://www.youtube.com/watch?v=abcdefghijk',
+    artworkUrl: 'https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg',
+    durationMs: 199000, requesterId: 'u', source: 'youtube'
+  };
+  const snapshot = { voiceChannelId: 'voice', current: track, queue: [], volume: 50, paused: false, positionMs: 65000 };
+  const panel = musicView(snapshot).embeds[0];
+  assert.ok(panel);
+  const embed = panel.toJSON();
+  assert.equal(embed.image?.url, track.artworkUrl);
+  assert.equal(embed.url, track.uri);
+  assert.match(embed.description ?? '', /Conan Gray/);
+  assert.match(embed.description ?? '', /1:05.*3:19/);
+  const unsafePanel = musicView({ ...snapshot, current: { ...track, artworkUrl: 'http://example.com/cover.png' } }).embeds[0];
+  assert.ok(unsafePanel);
+  const unsafe = unsafePanel.toJSON();
+  assert.equal(unsafe.image, undefined);
 });

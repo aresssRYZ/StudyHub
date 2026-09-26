@@ -26,9 +26,10 @@ export class MusicService {
   }
 
   available(): boolean { return this.provider.available(); }
-  snapshot(guildId: string): { voiceChannelId: string; current: MusicTrack | null; queue: MusicTrack[]; volume: number; paused: boolean } | null {
+  snapshot(guildId: string): { voiceChannelId: string; current: MusicTrack | null; queue: MusicTrack[]; volume: number; paused: boolean; positionMs: number } | null {
     const session = this.sessions.get(guildId);
-    return session ? { voiceChannelId: session.voiceChannelId, current: session.current, queue: [...session.queue], volume: session.volume, paused: session.paused } : null;
+    return session ? { voiceChannelId: session.voiceChannelId, current: session.current, queue: [...session.queue], volume: session.volume, paused: session.paused,
+      positionMs: session.current ? Math.max(0, this.provider.position?.(guildId) ?? 0) : 0 } : null;
   }
   private serial<T>(guildId: string, operation: () => Promise<T>): Promise<T> {
     const previous = this.pending.get(guildId) ?? Promise.resolve();

@@ -5,6 +5,8 @@ export interface MusicTrack {
   durationMs: number;
   requesterId: string;
   source: string;
+  author?: string;
+  artworkUrl?: string;
 }
 
 export interface MusicProvider {
@@ -15,6 +17,7 @@ export interface MusicProvider {
   pause(guildId: string, paused: boolean): Promise<void>;
   stopTrack(guildId: string): Promise<void>;
   volume(guildId: string, level: number): Promise<void>;
+  position?(guildId: string): number;
   leave(guildId: string): Promise<void>;
   dispose?(): Promise<void>;
   onEnd?: (guildId: string, encoded: string, reason: string) => void;
