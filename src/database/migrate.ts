@@ -3,10 +3,11 @@ import { initialMigration } from './migrations/001_initial.js';
 import { conversationsMigration } from './migrations/002_conversations.js';
 import { replyLinksMigration } from './migrations/003_reply_links.js';
 import { focusSessionsMigration } from './migrations/004_focus_sessions.js';
+import { playlistsMigration } from './migrations/005_playlists.js';
 import { DatabaseError } from '../shared/errors.js';
 import { logger } from '../shared/logger.js';
 
-const migrations = [initialMigration, conversationsMigration, replyLinksMigration, focusSessionsMigration];
+const migrations = [initialMigration, conversationsMigration, replyLinksMigration, focusSessionsMigration, playlistsMigration];
 
 export function migrate(database: StudyHubDatabase): void {
   try {

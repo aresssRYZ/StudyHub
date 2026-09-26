@@ -17,7 +17,9 @@ const env = {
   NODE_ENV: 'test', AI_SESSION_TIMEOUT_MINUTES: 20, AI_MAX_CONTEXT_MESSAGES: 20,
   FOCUS_MIN_DURATION_MINUTES: 5, FOCUS_MAX_DURATION_MINUTES: 180, APP_TIMEZONE: 'Asia/Jakarta',
   SONATA_HOST: '127.0.0.1', SONATA_PORT: 2333, SONATA_PASSWORD: 'test', SONATA_SECURE: false,
-  MUSIC_DEFAULT_VOLUME: 50, MUSIC_IDLE_TIMEOUT_SECONDS: 180
+  MUSIC_DEFAULT_VOLUME: 50, MUSIC_IDLE_TIMEOUT_SECONDS: 180, PLAYLIST_MAX_PER_USER: 50, PLAYLIST_MAX_TRACKS: 200,
+  VOICE_STT_MODEL: 'whisper-large-v3-turbo', VOICE_STT_LANGUAGE: 'id', VOICE_END_SILENCE_MS: 1000,
+  VOICE_MAX_UTTERANCE_SECONDS: 30, VOICE_MAX_CONTEXT_MESSAGES: 12, VOICE_SESSION_IDLE_MINUTES: 10, VOICE_TTS_VOICE: 'id-ID-GadisNeural'
 } satisfies Env;
 
 function setup(nowValue = Date.now()) {
@@ -80,7 +82,7 @@ test('restart restores remaining time and completes sessions that expired offlin
     assert.equal(notifications.length, 1);
     afterDowntime.dispose();
     migrate(database);
-    assert.equal((database.prepare('SELECT COUNT(*) n FROM schema_migrations').get() as { n: number }).n, 4);
+    assert.equal((database.prepare('SELECT COUNT(*) n FROM schema_migrations').get() as { n: number }).n, 5);
   } finally { first.dispose(); database.close(); }
 });
 

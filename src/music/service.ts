@@ -8,6 +8,7 @@ interface Session {
   queue: MusicTrack[];
   volume: number;
   paused: boolean;
+  focusSessionId?: number;
   idleTimer?: NodeJS.Timeout;
 }
 
@@ -15,6 +16,11 @@ export type MusicNotice = (channelId: string, message: string) => Promise<void>;
 
 export class MusicService {
   private readonly sessions = new Map<string, Session>();
+  private voiceAiActive: (guildId: string) => boolean = () => false;
+  setVoiceAiActiveChecker(check: (guildId: string) => boolean): void { this.voiceAiActive = check; }
+  private ensureVoiceAiInactive(guildId: string): void {
+    if (this.voiceAiActive(guildId)) throw new Error('Voice AI lagi aktif. Keluar dulu dari mode AI sebelum muter musik.');
+  }
   private readonly pending = new Map<string, Promise<unknown>>();
   constructor(private readonly provider: MusicProvider, private readonly defaultVolume: number,
     private readonly idleSeconds: number, private readonly notice: MusicNotice) {
@@ -26,6 +32,61 @@ export class MusicService {
   }
 
   available(): boolean { return this.provider.available(); }
+  occupied(guildId: string): boolean { return this.sessions.has(guildId) || this.pending.has(guildId); }
+  resolveTrack(query: string, requesterId: string): Promise<MusicTrack | null> {
+    if (!this.available()) throw new Error('Server musik Sonata sedang offline.');
+    return this.provider.resolve(query, requesterId);
+  }
+  resolvePlaylist(url: string, requesterId: string, limit?: number): Promise<MusicTrack[]> {
+    if (!this.provider.resolvePlaylist) throw new Error('Impor playlist belum didukung server musik.');
+    return this.provider.resolvePlaylist(url, requesterId, limit);
+  }
+  async enqueueResolved(guildId: string, voiceChannelId: string, textChannelId: string,
+    tracks: MusicTrack[], focusSessionId?: number): Promise<'busy' | number> {
+    return this.serial(guildId, async () => {
+      this.ensureVoiceAiInactive(guildId);
+      if (!this.available()) throw new Error('Server musik Sonata sedang offline.');
+      let session = this.sessions.get(guildId);
+      if (focusSessionId !== undefined && (session?.current || session?.queue.length)) return 'busy';
+      if (session && session.voiceChannelId !== voiceChannelId) throw new Error('Masuk ke voice channel tempat bot berada.');
+      if (!tracks.length) return 0;
+      const created = !session;
+      if (!session) {
+        await this.provider.join(guildId, voiceChannelId);
+        session = { voiceChannelId, textChannelId, current: null, queue: [], volume: this.defaultVolume, paused: false };
+        this.sessions.set(guildId, session);
+      }
+      this.cancelIdle(session);
+      session.textChannelId = textChannelId;
+      if (focusSessionId === undefined) session.focusSessionId = undefined;
+      let added = 0;
+      for (const track of tracks) {
+        if (session.current) { session.queue.push(track); added++; continue; }
+        try {
+          await this.provider.play(guildId, track, session.volume);
+          session.current = track;
+          session.paused = false;
+          added++;
+        } catch (error) {
+          logger.warn({ guildId, message: error instanceof Error ? error.message : String(error) }, 'Playlist track could not start');
+        }
+      }
+      if (added && focusSessionId !== undefined) session.focusSessionId = focusSessionId;
+      if (!added) {
+        if (created) await this.clear(guildId);
+        else this.scheduleIdle(guildId, session);
+      }
+      return added;
+    });
+  }
+  async stopFocusOwned(guildId: string, focusSessionId: number): Promise<boolean> {
+    return this.serial(guildId, async () => {
+      const session = this.sessions.get(guildId);
+      if (!session || session.focusSessionId !== focusSessionId) return false;
+      await this.clear(guildId);
+      return true;
+    });
+  }
   snapshot(guildId: string): { voiceChannelId: string; current: MusicTrack | null; queue: MusicTrack[]; volume: number; paused: boolean; positionMs: number } | null {
     const session = this.sessions.get(guildId);
     return session ? { voiceChannelId: session.voiceChannelId, current: session.current, queue: [...session.queue], volume: session.volume, paused: session.paused,
@@ -55,6 +116,7 @@ export class MusicService {
   }
   async play(guildId: string, voiceChannelId: string, textChannelId: string, query: string, requesterId: string): Promise<{ kind: 'playing' | 'queued'; track: MusicTrack; position: number }> {
     return this.serial(guildId, async () => {
+      this.ensureVoiceAiInactive(guildId);
       if (!this.available()) throw new Error('Server musik Sonata sedang offline. Coba lagi nanti.');
       const existing = this.sessions.get(guildId);
       if (existing && existing.voiceChannelId !== voiceChannelId) throw new Error('Masuk ke voice channel tempat bot berada untuk menambah lagu.');
@@ -68,6 +130,7 @@ export class MusicService {
         this.sessions.set(guildId, session);
       }
       session.textChannelId = textChannelId;
+      session.focusSessionId = undefined;
       this.cancelIdle(session);
       if (session.current) {
         session.queue.push(track);
@@ -116,6 +179,7 @@ export class MusicService {
       if (!session?.current) throw new Error('Tidak ada lagu yang sedang diputar.');
       await this.provider.stopTrack(guildId);
       session.current = null;
+      session.focusSessionId = undefined;
       logger.info({ guildId }, 'Track skipped');
       return this.startNext(guildId, session);
     });
@@ -127,6 +191,7 @@ export class MusicService {
       if (session.paused === paused) throw new Error(paused ? 'Musik sudah dijeda.' : 'Musik sudah berjalan.');
       await this.provider.pause(guildId, paused);
       session.paused = paused;
+      session.focusSessionId = undefined;
     });
   }
   async volume(guildId: string, level: number): Promise<void> {
@@ -135,6 +200,7 @@ export class MusicService {
       if (!session) throw new Error('Bot belum memutar musik di server ini.');
       await this.provider.volume(guildId, level);
       session.volume = level;
+      session.focusSessionId = undefined;
     });
   }
   private async clear(guildId: string): Promise<void> {

@@ -14,14 +14,21 @@ import { FocusRepository } from '../focus/repository.js';
 import { FocusService } from '../focus/service.js';
 import { SonataProvider } from '../music/sonata-provider.js';
 import { MusicService } from '../music/service.js';
+import { PlaylistRepository } from '../playlist/repository.js';
+import { PlaylistService } from '../playlist/service.js';
 import { DiscordError, errorDetails } from '../shared/errors.js';
 import { configureLogger, logger } from '../shared/logger.js';
+import { VoiceService } from '../voice/service.js';
+import { SttService, GroqWhisperProvider } from '../voice/stt.js';
+import { TtsService, EdgeTtsProvider } from '../voice/tts.js';
+import { VoiceConversationService } from '../voice/conversation.js';
 
 export async function startBot(): Promise<void> {
   let database: StudyHubDatabase | undefined;
   let client: Client | undefined;
   let focus: FocusService | undefined;
   let music: MusicService | undefined;
+  let voice: VoiceService | undefined;
   let shuttingDown = false;
 
   const shutdown = async (exitCode: number): Promise<void> => {
@@ -30,6 +37,7 @@ export async function startBot(): Promise<void> {
     process.exitCode = exitCode;
     logger.info('Shutting down StudyHub');
     focus?.dispose();
+    if (voice) await voice.dispose();
     if (music) await music.dispose();
     if (client) {
       try {
@@ -72,12 +80,13 @@ export async function startBot(): Promise<void> {
     logger.info('Database connected');
     migrate(activeDatabase);
 
+    const ai = new AiService(
+      new GroqProvider(env.GROQ_API_KEY, env.GROQ_MODEL),
+      new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_MODEL)
+    );
     const conversations = new ConversationService(
       new ConversationRepository(activeDatabase, env.AI_MAX_CONTEXT_MESSAGES),
-      new AiService(
-        new GroqProvider(env.GROQ_API_KEY, env.GROQ_MODEL),
-        new GeminiProvider(env.GEMINI_API_KEY, env.GEMINI_MODEL)
-      ),
+      ai,
       env
     );
 
@@ -90,6 +99,14 @@ export async function startBot(): Promise<void> {
       await channel.send({ content: message, allowedMentions: { parse: [] } });
     });
     const activeMusic = music;
+    voice = new VoiceService(activeClient, activeMusic, env,
+      new SttService(new GroqWhisperProvider(env.GROQ_API_KEY, env.VOICE_STT_MODEL, env.VOICE_STT_LANGUAGE)),
+      new TtsService(new EdgeTtsProvider(env.VOICE_TTS_VOICE)),
+      () => new VoiceConversationService(ai, env.VOICE_MAX_CONTEXT_MESSAGES));
+    const activeVoice = voice;
+    activeMusic.setVoiceAiActiveChecker((guildId) => activeVoice.active(guildId));
+    const playlists = new PlaylistService(new PlaylistRepository(activeDatabase), activeMusic,
+      env.PLAYLIST_MAX_PER_USER, env.PLAYLIST_MAX_TRACKS);
     focus = new FocusService(new FocusRepository(activeDatabase), env, async (session) => {
       const channel = await activeClient.channels.fetch(session.channelId);
       if (!channel?.isSendable()) throw new DiscordError('Focus notification channel is unavailable.');
@@ -97,10 +114,11 @@ export async function startBot(): Promise<void> {
         content: `<@${session.userId}> ⏰ Sesi fokus ${session.durationMinutes} menit selesai. Mantap!`,
         allowedMentions: { users: [session.userId] }
       });
-    });
+    }, Date.now, async (session) => { await activeMusic.stopFocusOwned(session.guildId, session.id); });
     const activeFocus = focus;
     client.once(Events.ClientReady, (readyClient) => onReady(readyClient));
-    client.on(Events.InteractionCreate, (interaction) => onInteractionCreate(interaction, activeDatabase, env, activeFocus, activeMusic));
+    client.on(Events.InteractionCreate, (interaction) => onInteractionCreate(interaction, activeDatabase, env, activeFocus, activeMusic, playlists, activeVoice));
+    client.on(Events.VoiceStateUpdate, (oldState, newState) => activeVoice.onVoiceState(oldState, newState));
     client.on(Events.MessageCreate, (message) => onMessageCreate(message, conversations));
     client.on(Events.Error, (error) => logger.error(errorDetails(error), 'Discord client error'));
     client.on(Events.Warn, (message) => logger.warn({ message }, 'Discord client warning'));

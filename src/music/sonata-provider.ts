@@ -3,16 +3,11 @@ import { Connectors, Shoukaku, type Player } from 'shoukaku';
 import type { Env } from '../config/env.js';
 import { logger } from '../shared/logger.js';
 import type { MusicProvider, MusicTrack } from './types.js';
+import { fetchYoutubePlaylist } from './youtube-playlist.js';
 
-function normalize(data: unknown, requesterId: string): MusicTrack | null {
+function normalizeCandidate(data: unknown, requesterId: string): MusicTrack | null {
   if (!data || typeof data !== 'object') return null;
-  const result = data as Record<string, unknown>;
-  const kind = String(result.loadType ?? '').toLowerCase();
-  if (kind.includes('playlist') || kind.includes('error') || kind.includes('empty')) return null;
-  const items = Array.isArray(result.tracks) ? result.tracks : Array.isArray(result.data) ? result.data : [result.data];
-  const first = items[0];
-  if (!first || typeof first !== 'object') return null;
-  const candidate = first as Record<string, unknown>;
+  const candidate = data as Record<string, unknown>;
   const info = candidate.info;
   if (typeof candidate.encoded !== 'string' || !info || typeof info !== 'object') return null;
   const metadata = info as Record<string, unknown>;
@@ -26,6 +21,33 @@ function normalize(data: unknown, requesterId: string): MusicTrack | null {
     author: typeof metadata.author === 'string' ? metadata.author.slice(0, 100) : undefined,
     artworkUrl: typeof metadata.artworkUrl === 'string' ? metadata.artworkUrl : undefined
   };
+}
+
+function normalize(data: unknown, requesterId: string): MusicTrack | null {
+  if (!data || typeof data !== 'object') return null;
+  const result = data as Record<string, unknown>;
+  const kind = String(result.loadType ?? '').toLowerCase();
+  if (kind.includes('playlist') || kind.includes('error') || kind.includes('empty')) return null;
+  const items = Array.isArray(result.tracks) ? result.tracks : Array.isArray(result.data) ? result.data : [result.data];
+  return normalizeCandidate(items[0], requesterId);
+}
+
+export function normalizePlaylist(data: unknown, requesterId: string): MusicTrack[] {
+  if (!data || typeof data !== 'object') return [];
+  const body = data as Record<string, unknown>;
+  const kind = String(body.loadType ?? '').toLowerCase();
+  if (kind.includes('error') || kind.includes('empty') || kind.includes('fail') || kind.includes('no_matches')) return [];
+  const items = Array.isArray(body.tracks) ? body.tracks : Array.isArray(body.data) ? body.data : [];
+  const tracks: MusicTrack[] = [];
+  for (const candidate of items) {
+    const track = normalizeCandidate(candidate, requesterId);
+    const info = candidate && typeof candidate === 'object' ? (candidate as Record<string, unknown>).info : null;
+    const identifier = info && typeof info === 'object' ? (info as Record<string, unknown>).identifier : null;
+    if (track && track.source.toLowerCase() === 'youtube' && typeof identifier === 'string' && /^[\w-]{11}$/.test(identifier)) {
+      tracks.push({ ...track, uri: `https://www.youtube.com/watch?v=${identifier}` });
+    }
+  }
+  return tracks;
 }
 
 export class SonataProvider implements MusicProvider {
@@ -78,6 +100,22 @@ export class SonataProvider implements MusicProvider {
 
   available(): boolean { return this.shoukaku.getIdealNode()?.state === 1; }
   position(guildId: string): number { return this.players.get(guildId)?.position ?? 0; }
+
+  async resolvePlaylist(url: string, requesterId: string, limit = 200): Promise<MusicTrack[]> {
+    try {
+      const tracks = await fetchYoutubePlaylist(url, requesterId, limit);
+      if (tracks.length) return tracks;
+    } catch (error) {
+      logger.warn({ message: error instanceof Error ? error.message : String(error) }, 'YouTube playlist page unavailable; trying Sonata');
+    }
+    const endpoint = new URL('/v4/loadtracks', this.baseUrl);
+    endpoint.searchParams.set('identifier', url);
+    const response = await fetch(endpoint, {
+      headers: { Authorization: this.env.SONATA_PASSWORD }, signal: AbortSignal.timeout(45000)
+    });
+    if (!response.ok) throw new Error(`Sonata playlist request failed (${response.status}).`);
+    return normalizePlaylist(await response.json(), requesterId).slice(0, limit);
+  }
 
   async resolve(query: string, requesterId: string): Promise<MusicTrack | null> {
     const trimmed = query.trim();

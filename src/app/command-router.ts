@@ -7,10 +7,14 @@ import type { FocusService } from '../focus/service.js';
 import type { MusicService } from '../music/service.js';
 import { executeMusic } from '../commands/music/music.js';
 import { executeMusicButton } from '../commands/music/ui.js';
+import { executePlaylist } from '../commands/playlist/playlist.js';
+import type { PlaylistService } from '../playlist/service.js';
+import type { VoiceService } from '../voice/service.js';
+import { executeAi } from '../commands/ai/voice.js';
 import { errorDetails } from '../shared/errors.js';
 import { logger } from '../shared/logger.js';
 
-export async function routeCommand(interaction: Interaction, database: StudyHubDatabase, env: Env, focus: FocusService, music: MusicService): Promise<void> {
+export async function routeCommand(interaction: Interaction, database: StudyHubDatabase, env: Env, focus: FocusService, music: MusicService, playlists: PlaylistService, voice?: VoiceService): Promise<void> {
   if (!interaction.isChatInputCommand() && !interaction.isButton()) return;
   if (interaction.isButton() && !interaction.customId.startsWith('music:')) return;
   const command = interaction.isButton() ? interaction.customId : interaction.commandName;
@@ -21,7 +25,11 @@ export async function routeCommand(interaction: Interaction, database: StudyHubD
     } else if (interaction.commandName === 'bot' && interaction.options.getSubcommand(false) === 'status') {
       await executeBotStatus(interaction, database, env, music);
     } else if (interaction.commandName === 'focus') {
-      await executeFocus(interaction, focus, env);
+      await executeFocus(interaction, focus, env, playlists, music);
+    } else if (interaction.commandName === 'playlist') {
+      await executePlaylist(interaction, playlists, music);
+    } else if (interaction.commandName === 'ai' && voice) {
+      await executeAi(interaction, voice);
     } else if (['play', 'pause', 'resume', 'skip', 'stop', 'queue', 'volume'].includes(interaction.commandName)) {
       await executeMusic(interaction, music);
     } else {

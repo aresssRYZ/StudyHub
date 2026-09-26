@@ -12,6 +12,7 @@ export interface MusicTrack {
 export interface MusicProvider {
   available(): boolean;
   resolve(query: string, requesterId: string): Promise<MusicTrack | null>;
+  resolvePlaylist?(url: string, requesterId: string, limit?: number): Promise<MusicTrack[]>;
   join(guildId: string, voiceChannelId: string): Promise<void>;
   play(guildId: string, track: MusicTrack, volume: number): Promise<void>;
   pause(guildId: string, paused: boolean): Promise<void>;

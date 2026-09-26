@@ -25,7 +25,9 @@ const env = {
   NODE_ENV: 'test', AI_SESSION_TIMEOUT_MINUTES: 20, AI_MAX_CONTEXT_MESSAGES: 20,
   FOCUS_MIN_DURATION_MINUTES: 5, FOCUS_MAX_DURATION_MINUTES: 180, APP_TIMEZONE: 'Asia/Jakarta',
   SONATA_HOST: '127.0.0.1', SONATA_PORT: 2333, SONATA_PASSWORD: 'test', SONATA_SECURE: false,
-  MUSIC_DEFAULT_VOLUME: 50, MUSIC_IDLE_TIMEOUT_SECONDS: 180
+  MUSIC_DEFAULT_VOLUME: 50, MUSIC_IDLE_TIMEOUT_SECONDS: 180, PLAYLIST_MAX_PER_USER: 50, PLAYLIST_MAX_TRACKS: 200,
+  VOICE_STT_MODEL: 'whisper-large-v3-turbo', VOICE_STT_LANGUAGE: 'id', VOICE_END_SILENCE_MS: 1000,
+  VOICE_MAX_UTTERANCE_SECONDS: 30, VOICE_MAX_CONTEXT_MESSAGES: 12, VOICE_SESSION_IDLE_MINUTES: 10, VOICE_TTS_VOICE: 'id-ID-GadisNeural'
 } satisfies Env;
 
 function setup(generate: (request: AiRequest) => Promise<string>) {
@@ -192,7 +194,7 @@ test('AI failure gets a friendly reply and migration remains idempotent', async 
     await conversations.handleMessage(message('user-a', `<@${botId}> halo`));
     assert.match(replies[0]?.content ?? '', /^Maaf, aku lagi susah/);
     migrate(database);
-    assert.equal((database.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get() as { count: number }).count, 4);
+    assert.equal((database.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get() as { count: number }).count, 5);
   } finally {
     database.close();
   }

@@ -16,7 +16,8 @@ export class FocusService {
     private readonly repository: FocusRepository,
     private readonly env: Env,
     private readonly notify: (session: FocusSession) => Promise<void>,
-    private readonly now: () => number = Date.now
+    private readonly now: () => number = Date.now,
+    private readonly onCompleted?: (session: FocusSession) => Promise<void>
   ) {}
 
   start(identity: FocusIdentity, channelId: string, durationMinutes: number): FocusStartResult {
@@ -119,5 +120,7 @@ export class FocusService {
     } catch (error) {
       logger.warn({ focusSessionId: id, type: error instanceof Error ? error.name : 'Unknown' }, 'Focus notification failed');
     }
+    try { await this.onCompleted?.(session); }
+    catch (error) { logger.warn({ focusSessionId: id, message: error instanceof Error ? error.message : String(error) }, 'Focus music cleanup failed'); }
   }
 }

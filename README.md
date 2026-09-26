@@ -1,6 +1,6 @@
 # StudyHub AI
 
-StudyHub AI adalah bot Discord privat untuk kelas dan komunitas kecil. Versi **0.4.0** menyediakan Foundation (`/bot status`, SQLite, migration, logging, dan shutdown), AI text conversation di kanal belajar, Focus Room dengan timer dan streak, serta Core Music Player berbasis Sonata. Panggil bot dengan mention, lalu gunakan fitur Reply pada jawaban bot untuk pertanyaan lanjutan. Playlist dan Voice AI belum tersedia.
+StudyHub AI adalah bot Discord privat untuk kelas dan komunitas kecil. Versi **0.5.0** menyediakan Foundation, AI text conversation, Focus Room, Core Music Player berbasis Sonata, dan playlist pribadi yang tersimpan di SQLite. Panggil bot dengan mention, lalu gunakan fitur Reply pada jawaban bot untuk pertanyaan lanjutan. Voice AI belum tersedia.
 
 ## Kebutuhan
 
@@ -39,7 +39,7 @@ npm run register
 npm run dev
 ```
 
-`register` mengganti daftar guild command milik aplikasi **di guild yang dipilih** dengan `/bot status`, `/focus`, dan tujuh command musik. Jalankan lagi setelah memperbarui command. Registrasi tidak otomatis dilakukan setiap startup bot.
+`register` mengganti daftar guild command milik aplikasi **di guild yang dipilih** dengan `/bot status`, `/focus`, `/playlist`, dan tujuh command musik. Jalankan lagi setelah memperbarui command. Registrasi tidak otomatis dilakukan setiap startup bot.
 
 Build dan jalankan hasil build:
 
@@ -62,6 +62,7 @@ src/app/                     bootstrap, router, registrasi command
 src/commands/bot/status.ts   /bot status dan embed
 src/events/                  event ready dan interaction
 src/conversation/            sesi, penyimpanan, dan alur pesan
+src/playlist/                repository dan service playlist pribadi
 src/ai/                      prompt, service, provider Groq/Gemini
 src/config/env.ts            pembacaan dan validasi environment
 src/database/                koneksi SQLite dan migration
@@ -91,7 +92,7 @@ Sesi disimpan di SQLite. Ketika waktu habis, bot menandai sesi selesai dan mengi
 
 Untuk menguji: jalankan `/focus start duration:5`, periksa `/focus status`, lalu `/focus stop` dan `/focus stats`. Uji pemulihan dengan memulai sesi, restart bot, lalu periksa `/focus status`; waktu selesai harus tetap sama. Untuk uji selesai alami, biarkan timer mencapai waktu selesai dan pastikan pemberitahuan muncul serta `/focus stats` bertambah.
 
-Roadmap Voice AI nanti memakai `/ai` untuk kontrol mode Assistant, Casual, dan Curhat. Mode Curhat direncanakan lebih tenang dan empatik, lebih banyak mendengar, tanpa langsung memberi solusi kecuali diminta. Voice AI belum diimplementasikan.
+Voice AI memakai `/ai` untuk kontrol mode Assistant, Casual, dan Curhat. Detail Phase 6 ada di bagian bawah.
 
 ## Phase 4: Core Music Player
 
@@ -108,7 +109,7 @@ Respons pemutar menampilkan cover lagu besar (jika tersedia), judul, artis, prog
 
 Font teks dan bentuk tombol mengikuti Discord. Berkas PNG di `assets/music-icons/` tetap tersedia sebagai aset desain bila nanti ingin membuat varian dengan application emoji.
 
-Pengguna harus berada di voice channel untuk `/play` dan seluruh kontrol; setelah bot bergabung, kontrol hanya berlaku dari voice channel yang sama. `/queue` dapat dibaca tanpa masuk voice. Antrean per server disimpan di memori dan hilang saat restart. Saat antrean kosong, bot menunggu 180 detik sebelum keluar dari voice. YouTube adalah satu-satunya sumber Phase 4. Focus Room tidak otomatis memutar musik; playlist direncanakan untuk Phase 5.
+Pengguna harus berada di voice channel untuk `/play` dan seluruh kontrol; setelah bot bergabung, kontrol hanya berlaku dari voice channel yang sama. `/queue` dapat dibaca tanpa masuk voice. Antrean per server disimpan di memori dan hilang saat restart. Saat antrean kosong, bot menunggu 180 detik sebelum keluar dari voice. YouTube adalah sumber musik yang didukung.
 
 ### Menjalankan Sonata di Windows 11
 
@@ -121,6 +122,34 @@ Pengguna harus berada di voice channel untuk `/play` dan seluruh kontrol; setela
 Sonata default mendengar pada `127.0.0.1:2333`; host loopback membatasi koneksi ke komputer lokal. Uji listener Windows dengan `Test-NetConnection 127.0.0.1 -Port 2333`. Jika Sonata belum berjalan, bot tetap dapat menjalankan Foundation, AI, dan Focus; command musik memberi pesan offline. Setelah Sonata hidup, adapter mencoba menyambung ulang dengan jeda yang meningkat sampai 60 detik. Untuk Linux Mint nanti, jalankan Sonata dan StudyHub sebagai dua service terpisah dengan working directory project yang benar; panduan service produksi belum menjadi bagian Phase 4.
 
 Jika `npm.cmd run dev` gagal di Windows dengan `uv_os_get_passwd` dari `tsx`, gunakan `npm.cmd run build` dan `npm.cmd start`. Skrip `npm.cmd test` memakai JavaScript hasil kompilasi untuk menghindari kegagalan lingkungan tersebut.
+
+## Phase 5: Playlist pribadi dan musik Focus
+
+Jalankan `npm.cmd run register` sekali setelah pembaruan agar grup `/playlist` muncul di server. Playlist lama dan data Focus/AI tidak dihapus; migration `005_playlists` otomatis dijalankan saat startup. Dua batas opsional di `.env` adalah `PLAYLIST_MAX_PER_USER=50` dan `PLAYLIST_MAX_TRACKS=200`.
+
+- `/playlist create name:belajar` membuat playlist pribadi. Nama 1–40 karakter, unik tanpa membedakan huruf besar/kecil per guild dan user.
+- `/playlist add name:belajar` menyimpan lagu yang sedang diputar. Tambahkan `query:<judul atau URL YouTube>` untuk mencari dan menyimpan lagu lain.
+- `/playlist import name:belajar url:<URL playlist YouTube>` menambahkan banyak lagu dari playlist YouTube sekaligus. Tautan `youtube.com/playlist?list=...` atau video dengan parameter `list=...` diterima. Bot menampilkan jumlah yang berhasil masuk dan berhenti saat batas 200 lagu tercapai.
+- `/playlist list` dan `/playlist show name:belajar` menampilkan daftar dan isi playlist. Daftar track dibatasi 15 per respons.
+- `/playlist remove name:belajar position:3` menghapus lagu ketiga; `/playlist delete name:belajar` menghapus playlist beserta seluruh track.
+- `/playlist load name:belajar` memuat lagu ke antrean dari voice channel yang sama dengan bot. Setiap video di-resolve ulang dari ID YouTube; track yang tidak tersedia hanya dilewati pada pemuatan itu dan tetap tersimpan.
+- `/playlist set-focus name:belajar` memilih satu playlist Focus; `/playlist unset-focus` melepasnya.
+
+`/focus start` tetap memulai timer meskipun voice, Sonata, izin bot, atau lagu tidak tersedia. Jika playlist Focus dipilih dan pemutar guild sedang idle, bot mencoba memutarnya otomatis. Jika pemutar sudah dipakai, musik yang ada tetap berjalan. `/focus stop` dan timer selesai hanya menghentikan musik yang masih dimiliki sesi Focus tersebut; interaksi musik manual melepas kepemilikan otomatis. Saat restart, playlist dan timer Focus dipulihkan, sedangkan antrean musik dan pemutaran Focus tidak dipulihkan. Playlist tidak mengunduh audio dan tidak menyimpan URL stream sementara.
+
+Impor playlist membaca halaman playlist YouTube publik dan halaman lanjutan yang tersedia, dengan Sonata sebagai cadangan. Playlist privat, video yang tidak tersedia, atau perubahan format halaman YouTube bisa membuat sebagian lagu tidak terbaca. Impor berhenti pada kapasitas playlist StudyHub; balasan command menunjukkan jumlah yang benar-benar tersimpan. Tidak ada API key YouTube tambahan atau unduhan audio.
+
+## Phase 6: Voice Conversation PoC
+
+Jalankan `npm.cmd run register` setelah update agar command `/ai` muncul. `/ai join` mengajak bot masuk ke voice channel pengguna; pengguna itu menjadi satu-satunya speaker yang diproses. `/ai mode mode:assistant|casual|curhat` mengganti gaya tanpa reconnect, `/ai status` menampilkan owner, channel, mode, state, dan durasi, dan `/ai leave` mengakhiri sesi. Hanya owner yang boleh mengganti mode atau keluar. Jika owner keluar atau bot dipindah/disconnect, sesi ditutup otomatis. Saat idle 10 menit, bot juga keluar.
+
+Mode **Assistant** membantu belajar, **Casual** mengobrol santai, dan **Curhat** mendengarkan dengan hangat tanpa buru-buru memberi saran. Voice memakai konteks sementara maksimal 12 pesan yang terpisah dari AI mention; konteks hilang saat sesi berakhir. Respons biasanya 1–4 kalimat. Bot mendengar tanpa wake word selama state Listening. Saat Processing atau Speaking, audio baru diabaikan; belum ada interruption, percakapan multi speaker, atau RVC. Headphone disarankan karena belum ada acoustic echo cancellation.
+
+Pipeline: receive Opus Discord dengan `selfDeaf: false` dan subscription hanya untuk owner, decode melalui `opusscript`, jeda 1000 ms mengakhiri ucapan, lalu PCM diturunkan menjadi WAV mono 16 kHz di memori. Ucapan di bawah 350 ms diabaikan dan ucapan dipotong setelah 30 detik. Groq Whisper mentranskripsikan audio; AIService Groq/Gemini lama memberi jawaban; Edge TTS `id-ID-GadisNeural` membuat MP3; `@discordjs/voice` memakai FFmpeg dan Opus untuk playback. Audio dan transkrip tidak disimpan ke SQLite atau log. Audio sementara hanya berada di memori. Receive audio Discord masih bersifat eksperimental menurut dokumentasi `@discordjs/voice`.
+
+Sonata tetap khusus musik. `/ai join` ditolak jika music session sedang aktif; gunakan `/stop` dahulu. `/play` dan pemuatan playlist ditolak selama Voice AI aktif; gunakan `/ai leave` dahulu. Timer Focus tetap berjalan. Bot memerlukan izin View Channel, Connect, dan Speak. Konfigurasi opsional tersedia di `.env.example`: `VOICE_STT_MODEL`, `VOICE_STT_LANGUAGE` (kosong untuk autodetect), `VOICE_END_SILENCE_MS`, `VOICE_MAX_UTTERANCE_SECONDS`, `VOICE_MAX_CONTEXT_MESSAGES`, `VOICE_SESSION_IDLE_MINUTES`, dan `VOICE_TTS_VOICE`. `GROQ_API_KEY` yang sama dipakai untuk STT; tidak perlu key baru. Jika instalasi baru memblokir install script `ffmpeg-static`, jalankan `npm.cmd install-scripts approve ffmpeg-static` dan pastikan binernya tersedia sebelum uji playback. Edge TTS adalah layanan online pihak ketiga dan dapat berubah sewaktu-waktu. Paket `@andresaya/edge-tts` berlisensi GPL-3.0-only; `ffmpeg-static` berlisensi GPL-3.0-or-later. Periksa kewajiban lisensi jika project didistribusikan.
+
+Untuk uji cloud tanpa merekam pengguna, jalankan `npm.cmd run build` lalu `node scripts/voice-smoke.mjs`; skrip menghasilkan ucapan sintetis dan mentranskripsikannya lewat Groq. Setelah itu jalankan satu bot, lalu uji `/ai join`, bicara satu kalimat, bicara kalimat kedua yang merujuk jawaban pertama, ganti tiga mode, periksa `/ai status`, lalu `/ai leave`. Coba user lain bicara dan pastikan bot diam. Uji `/play` saat Voice AI aktif serta `/ai join` saat musik aktif. Log `Voice utterance completed` mencatat `sttMs`, `llmMs`, `ttsMs`, `responseStartMs`, dan `totalMs` tanpa isi transkrip. `responseStartMs` adalah waktu sampai player mulai, bukan bukti audio terdengar di klien Discord. Untuk CPU/RAM, catat proses bot dengan Task Manager atau `Get-Process node | Select-Object Id,CPU,WorkingSet64` sebelum join, saat idle, bicara, dan playback. Uji Lenovo IdeaPad 330 Linux Mint belum dilakukan.
 
 ## Checklist uji AI text
 

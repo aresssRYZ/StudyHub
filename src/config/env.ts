@@ -25,6 +25,15 @@ const envSchema = z.object({
   SONATA_SECURE: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
   MUSIC_DEFAULT_VOLUME: z.coerce.number().int().min(0).max(100).default(50),
   MUSIC_IDLE_TIMEOUT_SECONDS: z.coerce.number().int().min(10).max(3600).default(180),
+  PLAYLIST_MAX_PER_USER: z.coerce.number().int().min(1).max(100).default(50),
+  PLAYLIST_MAX_TRACKS: z.coerce.number().int().min(1).max(500).default(200),
+  VOICE_STT_MODEL: z.string().min(1).default('whisper-large-v3-turbo'),
+  VOICE_STT_LANGUAGE: z.string().default('id'),
+  VOICE_END_SILENCE_MS: z.coerce.number().int().min(500).max(3000).default(1000),
+  VOICE_MAX_UTTERANCE_SECONDS: z.coerce.number().int().min(5).max(60).default(30),
+  VOICE_MAX_CONTEXT_MESSAGES: z.coerce.number().int().min(2).max(40).refine((value) => value % 2 === 0).default(12),
+  VOICE_SESSION_IDLE_MINUTES: z.coerce.number().int().min(1).max(120).default(10),
+  VOICE_TTS_VOICE: z.string().min(1).default('id-ID-GadisNeural'),
   DATABASE_PATH: z.string().min(1),
   NODE_ENV: z.enum(['development', 'production', 'test'])
 }).refine((value) => value.FOCUS_MIN_DURATION_MINUTES <= value.FOCUS_MAX_DURATION_MINUTES, {

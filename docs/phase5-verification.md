@@ -1,0 +1,11 @@
+# Phase 5 verification
+
+Migration `005_playlists` adds `playlists` and `playlist_tracks`. Ownership is `(guild_id, user_id, normalized_name)`; one Focus designation per owner is enforced by a partial unique index. `playlist_tracks.playlist_id` uses `ON DELETE CASCADE`. Stored tracks contain a YouTube video ID and display metadata, never a direct audio stream URL. Internal positions may have gaps after removals; user-facing positions are the current ordered ordinal.
+
+Automated tests cover persistence across reopening SQLite, migration idempotence, user isolation, case-insensitive duplicates, duplicate tracks, ordered removal, cascade delete, empty playlist, limits, unavailable videos, voice-channel restriction, Focus player-busy policy, manual ownership revocation, Focus completion cleanup, and Focus timer independence when Sonata is offline. Earlier AI, Focus, and music tests are included in `npm.cmd test`.
+
+Discord interaction testing still needs a running bot and Sonata: run `npm.cmd run register`, then try `/playlist create`, `/playlist add` with both current track and query, `/playlist load`, `/playlist set-focus`, and `/focus start` in an idle voice channel. Repeat `/focus start` while another song plays to confirm it does not replace the current player. Restart the bot to confirm playlists and Focus timers persist while music playback does not resume.
+
+Local verification on 2026-09-26: `npm.cmd run typecheck`, `npm.cmd run build`, and `npm.cmd test` passed (32 tests). Guild command registration succeeded for the configured guild, including `/playlist`. Manual Discord playback and button interaction remain to be checked in the running server.
+
+YouTube bulk import extension: `/playlist import` reads public YouTube playlist pages and available continuation pages, with Sonata's loadtracks response as fallback. It canonicalizes video URLs from video IDs and saves tracks in one SQLite transaction. Tests cover URL validation, original order, duplicates, playlist limits, unavailable metadata, continuation parsing, and discarding temporary stream URLs. Direct read-only verification retrieved 176 ordered video IDs from a public YouTube playlist, all mapped to canonical video URLs. YouTube may return only a portion of very long external playlists; private playlists cannot be imported without access.
