@@ -104,7 +104,9 @@ Command tersedia:
 - `/queue`: tampilkan lagu aktif dan sepuluh lagu berikutnya.
 - `/volume value:<0-100>`: atur volume, default 50%.
 
-Respons pemutar menampilkan cover lagu besar (jika tersedia), judul, artis, progres, peminta lagu, volume, antrean, dan tombol Pause, Resume, Skip, Stop, Queue, serta Volume −10/+10. Progres pada pesan diperbarui saat panel dibuat atau tombol ditekan. Tombol Queue menampilkan antrean terbaru secara privat; tombol lain hanya dapat dipakai anggota di voice channel bot. Panel yang lebih lama tetap mengontrol lagu yang sedang aktif saat tombol ditekan.
+Respons pemutar menampilkan cover lagu besar (jika tersedia), judul, artis, progres, peminta lagu, volume, antrean, dan tombol ikon ▶️ lanjut, ⏸️ jeda, ⏭️ lewati, ⏹️ berhenti, ☰ antrean, serta ➖/➕ volume. Progres pada pesan diperbarui saat panel dibuat atau tombol ditekan. Tombol antrean menampilkan status terbaru secara privat; tombol lain hanya dapat dipakai anggota di voice channel bot. Panel yang lebih lama tetap mengontrol lagu yang sedang aktif saat tombol ditekan.
+
+Untuk memakai ikon gambar tanpa emoji keyboard, unggah tujuh PNG di `assets/music-icons/` melalui Discord Developer Portal → aplikasi StudyHub → Emojis. Isi `MUSIC_EMOJI_RESUME`, `MUSIC_EMOJI_PAUSE`, `MUSIC_EMOJI_SKIP`, `MUSIC_EMOJI_STOP`, `MUSIC_EMOJI_QUEUE`, `MUSIC_EMOJI_VOLUME_DOWN`, dan `MUSIC_EMOJI_VOLUME_UP` di `.env` dengan ID application emoji sesuai nama filenya. Restart bot setelah mengubah `.env`. Ikon kosong tetap memakai ikon bawaan. `python scripts/generate-music-icons.py` dapat membuat ulang PNG bila Pillow tersedia. Font teks dan bentuk tombol tetap mengikuti Discord.
 
 Pengguna harus berada di voice channel untuk `/play` dan seluruh kontrol; setelah bot bergabung, kontrol hanya berlaku dari voice channel yang sama. `/queue` dapat dibaca tanpa masuk voice. Antrean per server disimpan di memori dan hilang saat restart. Saat antrean kosong, bot menunggu 180 detik sebelum keluar dari voice. YouTube adalah satu-satunya sumber Phase 4. Focus Room tidak otomatis memutar musik; playlist direncanakan untuk Phase 5.
 

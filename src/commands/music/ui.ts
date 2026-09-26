@@ -8,6 +8,11 @@ type Snapshot = NonNullable<ReturnType<MusicService['snapshot']>>;
 type Action = 'pause' | 'resume' | 'skip' | 'stop' | 'queue' | 'volume_down' | 'volume_up';
 const actions = new Set<Action>(['pause', 'resume', 'skip', 'stop', 'queue', 'volume_down', 'volume_up']);
 
+function buttonEmoji(action: Action, fallback: string): string | { id: string; name: string } {
+  const id = process.env[`MUSIC_EMOJI_${action.toUpperCase()}`];
+  return id && /^\d{17,20}$/.test(id) ? { id, name: `studyhub_${action}` } : fallback;
+}
+
 const safe = (value: string): string => value.replace(/\s+/g, ' ').replace(/[@`*_~|>\\]/g, '\\$&').slice(0, 100);
 const duration = (ms: number): string => ms > 0
   ? `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}` : 'Live';
@@ -40,18 +45,18 @@ function progress(positionMs: number, totalMs: number): string {
 export function musicView(snapshot: Snapshot | null, content = '') {
   const current = snapshot?.current;
   const embed = new EmbedBuilder()
-    .setColor(current ? (snapshot.paused ? 0xE8AD58 : 0x5BA5EF) : 0x747F8D)
-    .setAuthor({ name: 'STUDYHUB AI  /  MUSIC PLAYER' })
+    .setColor(current ? (snapshot.paused ? 0xD9A75F : 0x7289DA) : 0x747F8D)
+    .setAuthor({ name: 'STUDYHUB  •  MUSIC' })
     .setTitle(current ? safe(current.title) : 'Pemutar musik')
     .setDescription(current
-      ? `${snapshot.paused ? '⏸️  Dijeda' : '▶️  Sedang diputar'}\n${current.author ? `**${safe(current.author)}**\n` : ''}\n${progress(snapshot.positionMs, current.durationMs)}`
+      ? `**${snapshot.paused ? '⏸  DIJEDA' : '♫  NOW PLAYING'}**\n${current.author ? `${safe(current.author)}\n` : ''}\n${progress(snapshot.positionMs, current.durationMs)}`
       : 'Belum ada lagu yang sedang diputar.')
     .addFields(
       { name: 'Diminta oleh', value: current ? `<@${current.requesterId}>` : '—', inline: true },
       { name: 'Volume', value: snapshot ? `${snapshot.volume}%` : '—', inline: true },
       { name: 'Antrean', value: snapshot ? `${snapshot.queue.length} lagu` : 'Kosong', inline: true }
     )
-    .setFooter({ text: 'Kontrol untuk voice channel yang sama • Queue menampilkan status terbaru' });
+    .setFooter({ text: 'STUDYHUB MUSIC  •  Kontrol tersedia di voice channel bot' });
   const link = youtubeUrl(current?.uri);
   if (link) embed.setURL(link);
   const cover = coverUrl(current?.artworkUrl);
@@ -62,15 +67,15 @@ export function musicView(snapshot: Snapshot | null, content = '') {
   }
   if (snapshot) embed.addFields({ name: 'Voice channel', value: `<#${snapshot.voiceChannelId}>`, inline: false });
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('music:pause').setLabel('Pause').setEmoji('⏸️').setStyle(ButtonStyle.Secondary).setDisabled(!current || snapshot.paused),
-    new ButtonBuilder().setCustomId('music:resume').setLabel('Resume').setEmoji('▶️').setStyle(ButtonStyle.Success).setDisabled(!current || !snapshot.paused),
-    new ButtonBuilder().setCustomId('music:skip').setLabel('Skip').setEmoji('⏭️').setStyle(ButtonStyle.Primary).setDisabled(!current),
-    new ButtonBuilder().setCustomId('music:stop').setLabel('Stop').setEmoji('⏹️').setStyle(ButtonStyle.Danger).setDisabled(!snapshot),
-    new ButtonBuilder().setCustomId('music:queue').setLabel('Queue').setEmoji('📜').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId('music:resume').setEmoji(buttonEmoji('resume', '▶️')).setStyle(ButtonStyle.Secondary).setDisabled(!current || !snapshot.paused),
+    new ButtonBuilder().setCustomId('music:pause').setEmoji(buttonEmoji('pause', '⏸️')).setStyle(ButtonStyle.Secondary).setDisabled(!current || snapshot.paused),
+    new ButtonBuilder().setCustomId('music:skip').setEmoji(buttonEmoji('skip', '⏭️')).setStyle(ButtonStyle.Secondary).setDisabled(!current),
+    new ButtonBuilder().setCustomId('music:stop').setEmoji(buttonEmoji('stop', '⏹️')).setStyle(ButtonStyle.Danger).setDisabled(!snapshot),
+    new ButtonBuilder().setCustomId('music:queue').setEmoji(buttonEmoji('queue', '☰')).setStyle(ButtonStyle.Secondary)
   );
   const volumeRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('music:volume_down').setLabel('Volume −10').setEmoji('🔉').setStyle(ButtonStyle.Secondary).setDisabled(!snapshot || snapshot.volume === 0),
-    new ButtonBuilder().setCustomId('music:volume_up').setLabel('Volume +10').setEmoji('🔊').setStyle(ButtonStyle.Secondary).setDisabled(!snapshot || snapshot.volume === 100)
+    new ButtonBuilder().setCustomId('music:volume_down').setEmoji(buttonEmoji('volume_down', '➖')).setStyle(ButtonStyle.Secondary).setDisabled(!snapshot || snapshot.volume === 0),
+    new ButtonBuilder().setCustomId('music:volume_up').setEmoji(buttonEmoji('volume_up', '➕')).setStyle(ButtonStyle.Secondary).setDisabled(!snapshot || snapshot.volume === 100)
   );
   return { content, embeds: [embed], components: [row, volumeRow], allowedMentions: { parse: [] as [] } };
 }

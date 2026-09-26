@@ -174,7 +174,7 @@ test('music buttons update state and block listeners from another voice channel'
   await executeMusicButton(interaction, music);
   assert.deepEqual(events.slice(0, 2), ['defer', 'fetch']);
   assert.equal(music.snapshot('a')?.paused, true);
-  assert.match(edits.at(-1)?.embeds[0]?.toJSON().description ?? '', /Dijeda/);
+  assert.match(edits.at(-1)?.embeds[0]?.toJSON().description ?? '', /Dijeda/i);
   Object.assign(interaction, { customId: 'music:resume' });
   await executeMusicButton(interaction, music);
   assert.equal(music.snapshot('a')?.paused, false);
@@ -209,6 +209,18 @@ test('music panel shows artwork and progress only from safe YouTube URLs', () =>
   assert.equal(embed.url, track.uri);
   assert.match(embed.description ?? '', /Conan Gray/);
   assert.match(embed.description ?? '', /1:05.*3:19/);
+  const rows = musicView(snapshot).components.map((row) => row.toJSON().components);
+  assert.deepEqual(rows.map((row) => row.map((button) => 'custom_id' in button ? button.custom_id : null)), [
+    ['music:resume', 'music:pause', 'music:skip', 'music:stop', 'music:queue'],
+    ['music:volume_down', 'music:volume_up']
+  ]);
+  assert.ok(rows.flat().every((button) => 'emoji' in button && button.emoji && !('label' in button && button.label)));
+  process.env.MUSIC_EMOJI_RESUME = '123456789012345678';
+  try {
+    const custom = musicView({ ...snapshot, paused: true }).components[0]?.toJSON().components[0];
+    assert.ok(custom && 'emoji' in custom);
+    assert.equal(custom.emoji?.id, '123456789012345678');
+  } finally { delete process.env.MUSIC_EMOJI_RESUME; }
   const unsafePanel = musicView({ ...snapshot, current: { ...track, artworkUrl: 'http://example.com/cover.png' } }).embeds[0];
   assert.ok(unsafePanel);
   const unsafe = unsafePanel.toJSON();
